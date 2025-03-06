@@ -69,6 +69,7 @@ const ChatDisplay = ({ response, loading, onAskQuestion }) => {
           <div className="loading-indicator">
             <div className="spinner"></div>
             <p>Processing your data...</p>
+            <p className="loading-detail">Map visualizations and geographical data are excluded from analysis.</p>
           </div>
         ) : response ? (
           <div className="response-text">
@@ -76,7 +77,7 @@ const ChatDisplay = ({ response, loading, onAskQuestion }) => {
           </div>
         ) : (
           <div className="empty-state">
-            <p>Click "Get Insights" to analyze all data in this dashboard</p>
+            <p>Click "Get Insights" to analyze this dashboard</p>
           </div>
         )}
       </div>

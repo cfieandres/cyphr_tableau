@@ -11,9 +11,12 @@ The cyphr AI Extension allows Tableau users to interact with AI capabilities dir
 - **Analytics**: Get AI-powered insights from your Tableau dashboard data
 - **Summarization**: Generate concise summaries of complex datasets
 - **General Q&A**: Ask questions about your data and get helpful answers
+- **Dynamic Endpoints**: Create custom endpoints without code changes
 - **Server Management UI**: Configure AI endpoints and agent settings through a web interface
 - **Privacy Protection**: Built-in anonymization of sensitive data (emails, phone numbers, etc.)
 - **Response Formatting**: Automatic formatting of responses for better readability
+- **Request Monitoring**: Comprehensive dashboard for tracking usage and performance
+- **Conversation History**: Maintain context across multiple interactions
 
 ## Architecture
 
@@ -21,6 +24,9 @@ The cyphr AI Extension allows Tableau users to interact with AI capabilities dir
 - **Backend**: Python FastAPI server deployed as containers in Snowflake Container Services
 - **AI Integration**: Claude LLM via Snowflake Cortex AI functions
 - **Data Retrieval**: Tableau REST API and MCP servers
+- **Database**: SQLite for storing endpoint configurations, request logs, and session data
+- **Dynamic Routing**: Intelligent endpoint selection based on content analysis
+- **Conversation Context**: Session-based history management for multi-turn interactions
 
 ## Getting Started
 
@@ -82,6 +88,32 @@ npm run dev
 
 The frontend will be available at http://localhost:3000.
 
+### API Endpoints
+
+#### AI Processing
+- `POST /{endpoint_path}`: Process data using a specific endpoint
+- `POST /route`: Auto-route to the most appropriate endpoint based on data
+
+#### Endpoint Management
+- `GET /api/endpoints`: List all configured endpoints
+- `GET /api/endpoints/{endpoint_path}`: Get details for a specific endpoint
+- `POST /api/endpoints`: Create or update an endpoint
+- `DELETE /api/endpoints/{endpoint_path}`: Delete an endpoint
+
+#### Session Management
+- `GET /sessions/{session_id}`: Get session information
+- `POST /sessions`: Create a new session
+- `DELETE /sessions/{session_id}`: Delete a session
+
+#### Monitoring
+- `GET /monitor`: View monitoring dashboard
+- `GET /monitor/stats`: Get usage statistics
+- `GET /monitor/log/{log_id}`: View details for a specific request
+
+#### UI Endpoints
+- `GET /endpoints-ui`: Endpoint management UI
+- `GET /manage`: Server configuration UI
+
 ### Testing
 
 #### Connectivity Tests
@@ -93,7 +125,7 @@ The frontend will be available at http://localhost:3000.
 - Run frontend tests: `cd tableau-ai-extension && npm test`
 - Run integration tests: `python integration_test.py`
 - Run performance tests: `python perf_test.py`
-- Run UAT tests: `python uat_test.py`
+- Run API tests: `python test_api.py`
 
 ## Deployment
 

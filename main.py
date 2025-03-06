@@ -32,6 +32,9 @@ templates = Jinja2Templates(directory=str(Path(BASE_DIR) / "templates"))
 # Create static files mount for the management UI
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Import our database
+from database.db import db
+
 # Basic endpoints
 @app.get("/")
 async def root():
@@ -46,26 +49,26 @@ async def health_check():
 @app.get("/endpoints")
 async def list_endpoints():
     """Return information about available API endpoints and their capabilities."""
-    # Get all registered agent configurations
-    configs = agent_config_manager.get_all_configs()
+    # Get all registered endpoint configurations from the database
+    endpoints_data = db.get_all_endpoints()
     
     # Format the endpoints for the response
     endpoints = []
-    for endpoint, settings in configs.items():
+    for endpoint_data in endpoints_data:
         # Skip internal endpoints that start with underscore
-        if endpoint.startswith('_'):
+        if endpoint_data["endpoint"].startswith('_'):
             continue
             
         # Get the endpoint ID without the leading slash
-        endpoint_id = endpoint[1:] if endpoint.startswith('/') else endpoint
+        endpoint_id = endpoint_data["endpoint"][1:] if endpoint_data["endpoint"].startswith('/') else endpoint_data["endpoint"]
         
         # Create the endpoint info
         endpoints.append({
             "id": endpoint_id,
-            "name": settings.name,
-            "description": settings.description,
-            "indicators": settings.indicators,
-            "priority": settings.priority
+            "name": endpoint_data["name"],
+            "description": endpoint_data["description"],
+            "indicators": endpoint_data["indicators"],
+            "priority": endpoint_data["priority"]
         })
     
     # Sort by priority
@@ -183,8 +186,7 @@ Make your analysis specific and data-driven."""
     response = llm_processor.process_query(
         prompt, 
         temperature=0.5,
-        endpoint="/analytics",
-        agent_config=agent_config_manager
+        endpoint="/analytics"
     )
     
     # Format the response
@@ -246,7 +248,67 @@ async def summarization(request: SummarizationRequest):
     response = llm_processor.process_query(
         prompt, 
         temperature=0.3,
-        endpoint="/summarization",
+        endpoint="/summarization"
+    )
+    
+    # Format the response
+    formatted_response = format_response(response, format_type=request.format_type)
+    
+    # Return the formatted response
+    return {"response": formatted_response}
+
+class StorePerfRequest(BaseModel):
+    """Model for store performance requests with optional format type."""
+    data: str
+    format_type: FormatType = FormatType.BULLET
+
+@app.post("/store-perf")
+async def store_perf(request: StorePerfRequest):
+    """
+    Process store performance data with Claude.
+    
+    Args:
+        request: The request containing store performance data to analyze and format type
+        
+    Returns:
+        JSON response with Claude's analysis
+    """
+    # No anonymization needed - data is internal only
+    anonymized_data = request.data
+    
+    # Try to parse the data to detect if it's combined worksheet data
+    try:
+        data_obj = json.loads(anonymized_data)
+        if isinstance(data_obj, dict) and 'worksheets' in data_obj and isinstance(data_obj['worksheets'], list):
+            # Format the data from multiple worksheets
+            dashboard_name = data_obj.get('dashboardName', 'Dashboard')
+            formatted_data = f"# {dashboard_name}\n\n"
+            
+            for worksheet in data_obj['worksheets']:
+                ws_name = worksheet.get('name', 'Unnamed Worksheet')
+                ws_data = worksheet.get('data', {})
+                
+                # Format each worksheet section
+                formatted_data += f"## {ws_name}\n"
+                
+                # Convert worksheet data to a readable format
+                ws_data_str = json.dumps(ws_data, indent=2)
+                formatted_data += f"```\n{ws_data_str}\n```\n\n"
+            
+            # Format for store performance data
+            prompt = formatted_data
+        else:
+            # Regular data format
+            prompt = anonymized_data
+    except (json.JSONDecodeError, TypeError):
+        # Not valid JSON or not the expected structure, use standard prompt
+        prompt = anonymized_data
+    
+    # Process with Claude using endpoint-specific configuration
+    response = llm_processor.process_query(
+        prompt, 
+        temperature=0.7,
+        endpoint="/store-perf",
         agent_config=agent_config_manager
     )
     
@@ -402,8 +464,7 @@ Dashboard Data:
                 response = llm_processor.process_query(
                     prompt, 
                     temperature=0.7,
-                    endpoint="/general",
-                    agent_config=agent_config_manager
+                    endpoint="/general"
                 )
                 
                 # Format the response
@@ -464,8 +525,7 @@ Please answer the question based solely on the dashboard data provided. Be speci
     response = llm_processor.process_query(
         prompt, 
         temperature=0.7,
-        endpoint="/general",
-        agent_config=agent_config_manager
+        endpoint="/general"
     )
     
     # Format the response
@@ -475,10 +535,9 @@ Please answer the question based solely on the dashboard data provided. Be speci
     return {"response": formatted_response}
 
 # Server Management UI endpoints
-from agent_config import AgentConfig
 
-# Initialize the agent configuration manager
-agent_config_manager = AgentConfig()
+# Import our database
+from database.db import db
 
 @app.get("/manage", response_class=HTMLResponse)
 async def manage_ui(request: Request):
@@ -491,69 +550,36 @@ async def manage_ui(request: Request):
     Returns:
         HTML response with the management UI
     """
-    # Get all agent configurations
-    configs = agent_config_manager.get_all_configs()
-    
-    # Convert to a list for the template
-    config_list = [
-        {
-            "endpoint": endpoint,
-            "agent_id": settings.agent_id,
-            "instructions": settings.instructions,
-            "name": settings.name,
-            "description": settings.description,
-            "indicators": settings.indicators,
-            "priority": settings.priority,
-            "model": settings.model,
-            "temperature": settings.temperature
-        }
-        for endpoint, settings in configs.items()
-    ]
+    # Get all endpoint configurations from database
+    endpoints = db.get_all_endpoints()
     
     # Render the template
     return templates.TemplateResponse(
         "manage.html", 
-        {"request": request, "configs": config_list}
+        {"request": request, "configs": endpoints}
     )
 
-class ConfigureRequest(BaseModel):
-    """Model for agent configuration requests."""
-    endpoint: str
-    agent_id: str
-    instructions: str
-    name: str
-    description: str
-    indicators: List[str] = []
-    priority: int = 100
-    model: str = "claude-3-5-sonnet"
-    temperature: float = 0.7
-
-@app.post("/manage/configure")
-async def configure_agent(request: ConfigureRequest):
+@app.get("/endpoints-ui", response_class=HTMLResponse)
+async def endpoints_ui(request: Request):
     """
-    Configure an agent endpoint.
+    Endpoint management UI.
     
     Args:
-        request: The configuration request
+        request: The FastAPI request object
         
     Returns:
-        JSON response with the updated configuration
+        HTML response with the endpoint management UI
     """
-    # Update the configuration
-    settings = agent_config_manager.add_or_update_config(
-        endpoint=request.endpoint,
-        agent_id=request.agent_id,
-        instructions=request.instructions,
-        name=request.name,
-        description=request.description,
-        indicators=request.indicators,
-        priority=request.priority,
-        model=request.model,
-        temperature=request.temperature
-    )
+    # Get all endpoint configurations from database
+    endpoints = db.get_all_endpoints()
     
-    # Return the updated settings
-    return {"status": "success", "config": settings.dict()}
+    # Render the template
+    return templates.TemplateResponse(
+        "endpoints.html", 
+        {"request": request, "endpoints": endpoints}
+    )
+
+# This functionality has been moved to endpoint_api.py API endpoints
 
 # Request routing
 from enum import Enum
@@ -629,16 +655,18 @@ async def route_request(data: str, task_type: TaskType, format_type: FormatType 
         # Try to parse the data to determine dashboard characteristics
         try:
             # Get all available endpoint configurations
-            all_configs = agent_config_manager.get_all_configs()
-            logging.info(f"Available endpoints: {list(all_configs.keys())}")
+            all_endpoints = db.get_all_endpoints()
+            endpoint_paths = [ep["endpoint"] for ep in all_endpoints]
+            logging.info(f"Available endpoints: {endpoint_paths}")
             
             # Create a mapping of endpoint IDs to task types
             endpoint_to_tasktype = {}
-            for endpoint, settings in all_configs.items():
+            for endpoint in all_endpoints:
+                endpoint_path = endpoint["endpoint"]
                 # Remove leading slash and convert to uppercase for TaskType enum
-                endpoint_id = endpoint.strip('/').upper()
+                endpoint_id = endpoint_path.strip('/').upper()
                 if hasattr(TaskType, endpoint_id):
-                    endpoint_to_tasktype[endpoint] = getattr(TaskType, endpoint_id)
+                    endpoint_to_tasktype[endpoint_path] = getattr(TaskType, endpoint_id)
             
             # Default to ANALYTICS if available, otherwise use the first available endpoint
             default_endpoint = "/analytics"
@@ -649,7 +677,7 @@ async def route_request(data: str, task_type: TaskType, format_type: FormatType 
             logging.info(f"Default task type: {determined_task_type.value} (from {default_endpoint})")
             
             # Create a scoring system for each endpoint
-            endpoint_scores = {endpoint: 0 for endpoint in all_configs.keys()}
+            endpoint_scores = {ep["endpoint"]: 0 for ep in all_endpoints}
             logging.info("Initial scores: " + ", ".join([f"{ep}: {score}" for ep, score in endpoint_scores.items()]))
             
             # Parse the data
@@ -662,7 +690,7 @@ async def route_request(data: str, task_type: TaskType, format_type: FormatType 
             
             if data_obj and isinstance(data_obj, dict):
                 dashboard_text = ""
-                score_explanations = {endpoint: [] for endpoint in all_configs.keys()}
+                score_explanations = {ep["endpoint"]: [] for ep in all_endpoints}
                 
                 # Check if there's a question - gives higher score to general endpoint
                 if 'question' in data_obj and data_obj['question']:
@@ -713,9 +741,10 @@ async def route_request(data: str, task_type: TaskType, format_type: FormatType 
                             logging.info(f"Many worksheets ({worksheet_count}), boosting /analytics (+10)")
                 
                 # Check for indicators in the dashboard text
-                for endpoint, settings in all_configs.items():
+                for endpoint_config in all_endpoints:
+                    endpoint = endpoint_config["endpoint"]
                     matching_indicators = []
-                    for indicator in settings.indicators:
+                    for indicator in endpoint_config["indicators"]:
                         if indicator.lower() in dashboard_text.lower():
                             endpoint_scores[endpoint] += 5
                             matching_indicators.append(indicator)
@@ -725,12 +754,14 @@ async def route_request(data: str, task_type: TaskType, format_type: FormatType 
                         logging.info(f"Endpoint {endpoint} matched indicators: {matching_indicators} (+{len(matching_indicators)*5})")
                 
                 # Add priority as a base score (inverted, since lower priority number = higher importance)
-                for endpoint, settings in all_configs.items():
+                for endpoint_config in all_endpoints:
+                    endpoint = endpoint_config["endpoint"]
+                    priority = endpoint_config["priority"]
                     # Max priority is 1000, so we adjust the score inversely
-                    priority_score = max(0, (1000 - settings.priority) / 10)
+                    priority_score = max(0, (1000 - priority) / 10)
                     endpoint_scores[endpoint] += priority_score
-                    score_explanations[endpoint].append(f"Priority {settings.priority} (base: +{priority_score:.1f})")
-                    logging.info(f"Endpoint {endpoint} priority {settings.priority} adds base score: +{priority_score:.1f}")
+                    score_explanations[endpoint].append(f"Priority {priority} (base: +{priority_score:.1f})")
+                    logging.info(f"Endpoint {endpoint} priority {priority} adds base score: +{priority_score:.1f}")
                 
                 # Log the final scores and explanations
                 logging.info("=== ENDPOINT SCORING RESULTS ===")
@@ -1204,6 +1235,53 @@ async def cleanup_sessions():
     deleted_count = session_manager.cleanup_expired_sessions()
     return {"deleted_count": deleted_count}
 
+# Import the API routers
+from endpoint_api import router as endpoint_api_router
+from dynamic_endpoint import router as dynamic_endpoint_router
+
+# First include the API endpoints router (higher precedence)
+app.include_router(endpoint_api_router)
+
+# Then include the dynamic endpoints router (lower precedence)
+# This will handle any paths not matched by other routers
+app.include_router(dynamic_endpoint_router)
+
+# Migrate existing endpoints from the config file to the database
+@app.on_event("startup")
+async def startup_migrate_endpoints():
+    """Migrate existing endpoints from agent_configs.json to the database on startup."""
+    try:
+        import os
+        import json
+        from pathlib import Path
+
+        # Check if agent_configs.json exists
+        config_file = os.path.join(Path(__file__).resolve().parent, "agent_configs.json")
+        if os.path.exists(config_file):
+            # Read the file
+            with open(config_file, "r") as f:
+                configs = json.load(f)
+                
+            # Migrate each endpoint to the database
+            for endpoint, config in configs.items():
+                # Check if endpoint already exists in the database
+                if not db.get_endpoint(endpoint):
+                    # Add to database
+                    db.add_or_update_endpoint(
+                        endpoint=endpoint,
+                        agent_id=config.get("agent_id", f"{endpoint.strip('/')}-agent"),
+                        name=config.get("name", endpoint.strip('/').capitalize()),
+                        description=config.get("description", ""),
+                        instructions=config.get("instructions", ""),
+                        indicators=config.get("indicators", []),
+                        priority=config.get("priority", 100),
+                        model=config.get("model", "claude-3-5-sonnet"),
+                        temperature=config.get("temperature", 0.7)
+                    )
+                    print(f"Migrated endpoint {endpoint} to database")
+    except Exception as e:
+        print(f"Error migrating endpoints: {e}")
+
 if __name__ == "__main__":
     # Get settings from environment variables
     host = os.getenv("HOST", "0.0.0.0")
@@ -1217,11 +1295,34 @@ if __name__ == "__main__":
         debug = True
         print("Debug mode enabled via CYPHR_DEBUG environment variable")
     
+    # Print application startup info
+    print("===============================================")
+    print("Starting cyphr AI Extension Server")
+    print("===============================================")
+    print(f"Host: {host}")
+    print(f"Port: {port}")
+    print(f"Debug mode: {debug}")
+    
+    # Log available API routes
+    print("\nRegistered API routes:")
+    for route in app.routes:
+        if hasattr(route, "methods") and hasattr(route, "path"):
+            methods = ", ".join(route.methods)
+            print(f"  {methods.ljust(20)} {route.path}")
+    
+    # Check database paths
+    db_path = os.path.join(BASE_DIR, "database", "cyphr.db")
+    print(f"\nDatabase path: {db_path}")
+    print(f"Database exists: {os.path.exists(db_path)}")
+    
     # Configure SSL if HTTPS is enabled
     ssl_context = None
     if use_https:
         ssl_context = setup_https()
         print("HTTPS enabled with self-signed certificate")
+    
+    print("\nStarting server...")
+    print("===============================================")
     
     # Run the application using uvicorn
     uvicorn.run(
@@ -1230,5 +1331,6 @@ if __name__ == "__main__":
         port=port, 
         reload=debug,
         ssl_keyfile="key.pem" if use_https else None,
-        ssl_certfile="cert.pem" if use_https else None
+        ssl_certfile="cert.pem" if use_https else None,
+        log_level="debug" if debug else "info"
     )

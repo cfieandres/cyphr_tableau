@@ -293,7 +293,7 @@
             };
             
             try {
-                const response = await fetch('/manage/configure', {
+                const response = await fetch('/api/endpoints', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -301,13 +301,16 @@
                     body: JSON.stringify(formData)
                 });
                 
-                const result = await response.json();
-                
-                if (result.status === 'success') {
+                if (response.ok) {
+                    const result = await response.json();
                     alert('Configuration saved successfully!');
                     window.location.reload();
                 } else {
-                    alert('Error saving configuration.');
+                    const errorData = await response.json();
+                    console.error('Server error:', errorData);
+                    alert(`Error saving configuration: ${errorData.detail || response.statusText}`);
+                    // Log the form data that was sent for debugging
+                    console.log('Form data sent:', formData);
                 }
             } catch (error) {
                 console.error('Error:', error);

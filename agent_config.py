@@ -9,6 +9,10 @@ class AgentSettings(BaseModel):
     endpoint: str
     agent_id: str
     instructions: str
+    name: str
+    description: str
+    indicators: List[str] = []
+    priority: int = 100
     model: str = "claude-3-5-sonnet"
     temperature: float = 0.7
 
@@ -80,7 +84,11 @@ class AgentConfig:
         self.add_or_update_config(
             endpoint="/analytics",
             agent_id="analytics-agent",
+            name="Analytics",
+            description="Analyze dashboard data to identify trends, patterns, and insights",
             instructions="Analyze data and provide comprehensive insights with bullet points.",
+            indicators=["trend", "analysis", "correlation", "insight", "detail", "breakdown"],
+            priority=10,
             model="claude-3-5-sonnet",
             temperature=0.5
         )
@@ -89,7 +97,11 @@ class AgentConfig:
         self.add_or_update_config(
             endpoint="/summarization",
             agent_id="summary-agent",
+            name="Summarization",
+            description="Provide concise summaries of dashboard data",
             instructions="Create a concise summary of the provided data, highlighting key points.",
+            indicators=["summary", "overview", "report", "brief"],
+            priority=20,
             model="claude-3-5-sonnet",
             temperature=0.3
         )
@@ -98,7 +110,11 @@ class AgentConfig:
         self.add_or_update_config(
             endpoint="/general",
             agent_id="general-agent",
+            name="General Questions",
+            description="Answer specific questions about dashboard data",
             instructions="Respond helpfully to user queries about the data.",
+            indicators=["question", "query", "what", "why", "how", "when", "where"],
+            priority=30,
             model="claude-3-5-sonnet",
             temperature=0.7
         )
@@ -128,7 +144,11 @@ class AgentConfig:
         self, 
         endpoint: str, 
         agent_id: str, 
-        instructions: str, 
+        instructions: str,
+        name: str = "",
+        description: str = "",
+        indicators: List[str] = None,
+        priority: int = 100,
         model: str = "claude-3-5-sonnet", 
         temperature: float = 0.7
     ) -> AgentSettings:
@@ -139,17 +159,37 @@ class AgentConfig:
             endpoint: The endpoint to configure
             agent_id: Identifier for the agent
             instructions: Instructions for the agent
+            name: Display name for the endpoint
+            description: Description of what the endpoint does
+            indicators: List of keywords that suggest this endpoint should be used
+            priority: Priority order (lower numbers have higher priority)
             model: The model to use (default: "claude-3-5-sonnet")
             temperature: The temperature parameter (default: 0.7)
             
         Returns:
             The updated agent settings
         """
+        # Use default name if not provided
+        if not name:
+            name = endpoint.strip('/').capitalize()
+            
+        # Use instructions as description if not provided
+        if not description:
+            description = instructions.split('.')[0] + '.'
+            
+        # Initialize indicators if None
+        if indicators is None:
+            indicators = []
+            
         # Create or update the configuration
         self.configs[endpoint] = AgentSettings(
             endpoint=endpoint,
             agent_id=agent_id,
             instructions=instructions,
+            name=name,
+            description=description,
+            indicators=indicators,
+            priority=priority,
             model=model,
             temperature=temperature
         )

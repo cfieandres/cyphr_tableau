@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endpoint Management - cyphr AI Extension</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
+        .endpoint-card {
+            margin-bottom: 20px;
+            transition: all 0.2s ease-in-out;
+        }
+        .endpoint-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-title {
+            margin: 0;
+        }
+        .badge-priority {
+            font-size: 0.8em;
+        }
+        .card-body .form-group {
+            margin-bottom: 1rem;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .indicator-badge {
+            margin-right: 5px;
+            margin-bottom: 5px;
+            display: inline-block;
+        }
+        #addEndpointModal .modal-dialog {
+            max-width: 700px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="mb-4">
+            <div class="d-flex align-items-center justify-content-between">
+                <h1>Endpoint Management</h1>
+                <div>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addEndpointModal">
+                        <i class="bi bi-plus-circle"></i> Add New Endpoint
+                    </button>
+                    <a href="/monitor" class="btn btn-outline-secondary ms-2">
+                        <i class="bi bi-graph-up"></i> Monitoring Dashboard
+                    </a>
+                </div>
+            </div>
+            <p class="lead">Manage custom LLM processing endpoints for the cyphr AI Extension</p>
+        </header>
+
+        <!-- Endpoints List -->
+        <div class="row" id="endpointsList">
+            {% for endpoint in endpoints %}
+            <div class="col-12 mb-4 endpoint-card-container">
+                <div class="card endpoint-card">
+                    <div class="card-header">
+                        <h5 class="header-title">{{ endpoint.name }}</h5>
+                        <div>
+                            <span class="badge bg-primary badge-priority">Priority: {{ endpoint.priority }}</span>
+                            <span class="badge bg-secondary">{{ endpoint.model }}</span>
+                            <span class="badge bg-info">T: {{ endpoint.temperature }}</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <strong>Endpoint:</strong> <code>{{ endpoint.endpoint }}</code>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Description:</strong> {{ endpoint.description }}
+                        </div>
+                        <div class="mb-3">
+                            <strong>Instructions:</strong>
+                            <div class="form-control" style="height: auto; min-height: 60px; overflow-y: auto;">{{ endpoint.instructions }}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Indicators:</strong>
+                            <div>
+                                {% for indicator in endpoint.indicators %}
+                                <span class="badge bg-secondary indicator-badge">{{ indicator }}</span>
+                                {% endfor %}
+                                {% if not endpoint.indicators %}
+                                <em class="text-muted">No indicators defined</em>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-end mt-3">
+                            <div class="action-buttons">
+                                <button class="btn btn-sm btn-outline-primary edit-endpoint" 
+                                    data-endpoint-id="{{ endpoint.endpoint }}"
+                                    data-endpoint-name="{{ endpoint.name }}"
+                                    data-endpoint-description="{{ endpoint.description }}"
+                                    data-endpoint-instructions="{{ endpoint.instructions }}"
+                                    data-endpoint-agent-id="{{ endpoint.agent_id }}"
+                                    data-endpoint-indicators="{{ endpoint.indicators|join(',') }}"
+                                    data-endpoint-priority="{{ endpoint.priority }}"
+                                    data-endpoint-model="{{ endpoint.model }}"
+                                    data-endpoint-temperature="{{ endpoint.temperature }}">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger delete-endpoint" data-endpoint-id="{{ endpoint.endpoint }}">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            
+            {% if not endpoints %}
+            <div class="col-12 text-center py-5">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No endpoints are configured yet. Click the "Add New Endpoint" button to create one.
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Add/Edit Endpoint Modal -->
+    <div class="modal fade" id="addEndpointModal" tabindex="-1" aria-labelledby="addEndpointModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addEndpointModalLabel">Add New Endpoint</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="endpointForm">
+                        <input type="hidden" id="isEditMode" value="false">
+                        
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="endpoint">Endpoint Path:</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">/</span>
+                                        <input type="text" class="form-control" id="endpoint" placeholder="e.g., analytics" required>
+                                    </div>
+                                    <small class="form-text text-muted">The URL path where this endpoint will be available.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="name">Display Name:</label>
+                                    <input type="text" class="form-control" id="name" placeholder="e.g., Analytics" required>
+                                    <small class="form-text text-muted">A user-friendly name for this endpoint.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="agent_id">Agent ID:</label>
+                                    <input type="text" class="form-control" id="agent_id" placeholder="e.g., analytics-agent" required>
+                                    <small class="form-text text-muted">Unique identifier for the agent.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="priority">Priority:</label>
+                                    <input type="number" class="form-control" id="priority" min="1" max="1000" value="100" required>
+                                    <small class="form-text text-muted">Lower numbers = higher priority.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <label for="description">Description:</label>
+                                    <input type="text" class="form-control" id="description" placeholder="e.g., Analyze dashboard data to identify trends and insights">
+                                    <small class="form-text text-muted">A brief description of what this endpoint does.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <label for="instructions">Instructions:</label>
+                                    <textarea class="form-control" id="instructions" rows="4" placeholder="Analyze the provided data and provide comprehensive insights..." required></textarea>
+                                    <small class="form-text text-muted">Instructions for Claude when processing requests to this endpoint.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <label for="indicators">Indicators (comma-separated):</label>
+                                    <input type="text" class="form-control" id="indicators" placeholder="e.g., trend,analysis,insight">
+                                    <small class="form-text text-muted">Keywords that suggest this endpoint should be used for routing.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="model">Model:</label>
+                                    <select class="form-select" id="model" required>
+                                        <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Default)</option>
+                                        <option value="claude-3-5-haiku">Claude 3.5 Haiku (Faster)</option>
+                                        <option value="claude-3-opus">Claude 3 Opus (Most powerful)</option>
+                                        <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                                        <option value="claude-3-haiku">Claude 3 Haiku</option>
+                                    </select>
+                                    <small class="form-text text-muted">The Claude model to use for this endpoint.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="temperature">Temperature:</label>
+                                    <input type="number" class="form-control" id="temperature" min="0" max="1" step="0.1" value="0.7" required>
+                                    <small class="form-text text-muted">Controls randomness (0 = deterministic, 1 = creative).</small>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveEndpoint">Save Endpoint</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Deletion</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the endpoint <strong id="deleteEndpointName"></strong>?</p>
+                    <p class="text-danger">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            const toastContainer = document.getElementById('toastContainer');
+            if (!toastContainer) {
+                // Create toast container if it doesn't exist
+                const container = document.createElement('div');
+                container.id = 'toastContainer';
+                container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+                document.body.appendChild(container);
+            }
+            
+            const toast = document.createElement('div');
+            toast.className = `toast align-items-center text-white bg-${type} border-0`;
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('aria-live', 'assertive');
+            toast.setAttribute('aria-atomic', 'true');
+            
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            `;
+            
+            document.getElementById('toastContainer').appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            // Remove toast after it's hidden
+            toast.addEventListener('hidden.bs.toast', function() {
+                toast.remove();
+            });
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Create toast container
+            const toastContainer = document.createElement('div');
+            toastContainer.id = 'toastContainer';
+            toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            document.body.appendChild(toastContainer);
+            
+            // Add Endpoint Form Submit
+            document.getElementById('saveEndpoint').addEventListener('click', function() {
+                const isEditMode = document.getElementById('isEditMode').value === 'true';
+                
+                // Get form values
+                let endpointPath = document.getElementById('endpoint').value.trim();
+                if (!endpointPath.startsWith('/')) {
+                    endpointPath = '/' + endpointPath;
+                }
+                
+                const name = document.getElementById('name').value.trim();
+                const agentId = document.getElementById('agent_id').value.trim();
+                const description = document.getElementById('description').value.trim();
+                const instructions = document.getElementById('instructions').value.trim();
+                const indicatorsStr = document.getElementById('indicators').value.trim();
+                const indicators = indicatorsStr ? indicatorsStr.split(',').map(i => i.trim()) : [];
+                const priority = parseInt(document.getElementById('priority').value);
+                const model = document.getElementById('model').value;
+                const temperature = parseFloat(document.getElementById('temperature').value);
+                
+                // Validate form
+                if (!endpointPath || !name || !agentId || !instructions) {
+                    showToast('Please fill in all required fields', 'danger');
+                    return;
+                }
+                
+                // Prepare request data
+                const requestData = {
+                    endpoint: endpointPath,
+                    agent_id: agentId,
+                    name: name,
+                    description: description || name,
+                    instructions: instructions,
+                    indicators: indicators,
+                    priority: priority,
+                    model: model,
+                    temperature: temperature
+                };
+                
+                // Send request to the server
+                fetch('/api/endpoints', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Hide modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addEndpointModal'));
+                    modal.hide();
+                    
+                    // Show success message
+                    showToast(`Endpoint ${isEditMode ? 'updated' : 'created'} successfully`, 'success');
+                    
+                    // Reload the page to show the new endpoint
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                })
+                .catch(error => {
+                    console.error('Error saving endpoint:', error);
+                    showToast(`Error: ${error.message}`, 'danger');
+                });
+            });
+            
+            // Edit Endpoint Button Click
+            document.querySelectorAll('.edit-endpoint').forEach(button => {
+                button.addEventListener('click', function() {
+                    // Set form to edit mode
+                    document.getElementById('isEditMode').value = 'true';
+                    document.getElementById('addEndpointModalLabel').textContent = 'Edit Endpoint';
+                    
+                    // Fill form with endpoint data
+                    const endpointId = this.getAttribute('data-endpoint-id');
+                    document.getElementById('endpoint').value = endpointId.replace(/^\//, '');
+                    document.getElementById('endpoint').disabled = true; // Can't change endpoint path
+                    
+                    document.getElementById('name').value = this.getAttribute('data-endpoint-name');
+                    document.getElementById('description').value = this.getAttribute('data-endpoint-description');
+                    document.getElementById('instructions').value = this.getAttribute('data-endpoint-instructions');
+                    document.getElementById('agent_id').value = this.getAttribute('data-endpoint-agent-id');
+                    document.getElementById('indicators').value = this.getAttribute('data-endpoint-indicators');
+                    document.getElementById('priority').value = this.getAttribute('data-endpoint-priority');
+                    document.getElementById('model').value = this.getAttribute('data-endpoint-model');
+                    document.getElementById('temperature').value = this.getAttribute('data-endpoint-temperature');
+                    
+                    // Show the modal
+                    const modal = new bootstrap.Modal(document.getElementById('addEndpointModal'));
+                    modal.show();
+                });
+            });
+            
+            // Reset form when modal is closed
+            document.getElementById('addEndpointModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('isEditMode').value = 'false';
+                document.getElementById('addEndpointModalLabel').textContent = 'Add New Endpoint';
+                document.getElementById('endpointForm').reset();
+                document.getElementById('endpoint').disabled = false;
+            });
+            
+            // Show Add Endpoint Modal for new endpoint
+            document.querySelector('[data-bs-target="#addEndpointModal"]').addEventListener('click', function() {
+                document.getElementById('isEditMode').value = 'false';
+                document.getElementById('addEndpointModalLabel').textContent = 'Add New Endpoint';
+                document.getElementById('endpointForm').reset();
+                document.getElementById('endpoint').disabled = false;
+            });
+            
+            // Delete Endpoint Button Click
+            document.querySelectorAll('.delete-endpoint').forEach(button => {
+                button.addEventListener('click', function() {
+                    const endpointId = this.getAttribute('data-endpoint-id');
+                    document.getElementById('deleteEndpointName').textContent = endpointId;
+                    
+                    // Store endpoint ID for delete confirmation
+                    document.getElementById('confirmDelete').setAttribute('data-endpoint-id', endpointId);
+                    
+                    // Show the confirmation modal
+                    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+                    modal.show();
+                });
+            });
+            
+            // Delete Confirmation
+            document.getElementById('confirmDelete').addEventListener('click', function() {
+                const endpointId = this.getAttribute('data-endpoint-id');
+                
+                // Send request to delete the endpoint
+                fetch(`/api/endpoints/${encodeURIComponent(endpointId)}`, {
+                    method: 'DELETE'
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Hide modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('deleteConfirmModal'));
+                    modal.hide();
+                    
+                    // Show success message
+                    showToast('Endpoint deleted successfully', 'success');
+                    
+                    // Reload the page
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                })
+                .catch(error => {
+                    console.error('Error deleting endpoint:', error);
+                    showToast(`Error: ${error.message}`, 'danger');
+                });
+            });
+        });
+    </script>
+</body>
+</html>

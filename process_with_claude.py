@@ -145,11 +145,9 @@ class SnowflakeLLMProcessor:
         agent_config=None,
         model="claude-3-5-sonnet", 
         max_tokens=4096,
+        instructions=None,  # New parameter for direct instructions
         **kwargs  # Add **kwargs to catch any other arguments
     ) -> str:
-        # Set module name for proper logging identification
-        logger_name = __name__
-        logger = logging.getLogger(logger_name)
         """
         Process a query using Claude via Snowflake Cortex.
         
@@ -157,32 +155,66 @@ class SnowflakeLLMProcessor:
             prompt: The prompt text to send to Claude
             temperature: The temperature parameter for the model (default: 0.7)
             endpoint: The endpoint being used (for config lookup)
-            agent_config: Optional agent configuration manager
+            agent_config: Optional agent configuration manager (legacy)
             model: The model to use (default: claude-3-5-sonnet)
             max_tokens: Maximum tokens for response (default: 4096)
+            instructions: Direct instructions to use (overrides config lookup)
             
         Returns:
             The response from Claude
         """
+        # Set module name for proper logging identification
+        logger_name = __name__
+        logger = logging.getLogger(logger_name)
+        
         try:
             # Build metadata dictionary
             metadata = {"endpoint": endpoint} if endpoint else {}
             
-            # Apply agent-specific settings if provided
-            system_message = ""
-            if endpoint and agent_config:
-                from agent_config import AgentConfig
-                if isinstance(agent_config, AgentConfig):
-                    config = agent_config.get_config(endpoint)
+            # Apply endpoint-specific settings if provided
+            system_message = instructions or ""
+            
+            # Try to get configuration from DB if endpoint is provided and no direct instructions
+            if endpoint and not instructions:
+                try:
+                    # Import here to avoid circular imports
+                    from database.db import db
+                    
+                    # Get the endpoint configuration
+                    config = db.get_endpoint(endpoint)
                     if config:
-                        # Use the agent's settings
-                        model = config.model
-                        temperature = config.temperature
-                        system_message = config.instructions if config.instructions else ""
+                        # Use the endpoint's settings
+                        model = config.get('model', model)
+                        temperature = config.get('temperature', temperature)
+                        system_message = config.get('instructions', "")
                         
                         # Add config details to metadata
-                        metadata["agent_id"] = config.agent_id
-                        metadata["config_id"] = f"{endpoint}_{config.agent_id}"
+                        metadata["agent_id"] = config.get('agent_id')
+                        metadata["config_id"] = f"{endpoint}_{config.get('agent_id')}"
+                except ImportError:
+                    logger.warning("Database module not available, could not look up endpoint configuration")
+                except Exception as e:
+                    logger.warning(f"Error getting endpoint configuration from database: {e}")
+            
+            # Legacy support for agent_config
+            elif endpoint and not system_message and agent_config:
+                try:
+                    from agent_config import AgentConfig
+                    if isinstance(agent_config, AgentConfig):
+                        config = agent_config.get_config(endpoint)
+                        if config:
+                            # Use the agent's settings
+                            model = config.model
+                            temperature = config.temperature
+                            system_message = config.instructions if config.instructions else ""
+                            
+                            # Add config details to metadata
+                            metadata["agent_id"] = config.agent_id
+                            metadata["config_id"] = f"{endpoint}_{config.agent_id}"
+                except ImportError:
+                    logger.warning("agent_config module not available")
+                except Exception as e:
+                    logger.warning(f"Error with legacy agent_config: {e}")
             
             # Preprocess the prompt
             processed_prompt = self.preprocess_text(prompt)

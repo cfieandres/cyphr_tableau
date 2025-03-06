@@ -63,6 +63,15 @@
   margin-bottom: 16px;
 }
 
+.loading-detail {
+  font-size: 11px;
+  color: #70757a;
+  max-width: 80%;
+  text-align: center;
+  margin-top: 5px;
+  font-style: italic;
+}
+
 @keyframes spin {
   0% {
     transform: rotate(0deg);

@@ -3,6 +3,17 @@
     "endpoint": "/analytics",
     "agent_id": "analytics-agent",
     "instructions": "Analyze data and provide comprehensive insights with bullet points.",
+    "name": "Analytics",
+    "description": "Analyze dashboard data to identify trends, patterns, and insights",
+    "indicators": [
+      "trend",
+      "analysis",
+      "correlation",
+      "insight",
+      "detail",
+      "breakdown"
+    ],
+    "priority": 10,
     "model": "claude-3-5-sonnet",
     "temperature": 0.5
   },
@@ -10,14 +21,37 @@
     "endpoint": "/summarization",
     "agent_id": "summary-agent",
     "instructions": "Create a concise summary of the provided data, highlighting key points.",
-    "model": "claude",
+    "name": "Summarization",
+    "description": "Create a concise summary of the provided data, highlighting key points.",
+    "indicators": [],
+    "priority": 100,
+    "model": "claude-3-5-sonnet",
     "temperature": 0.3
   },
   "/general": {
     "endpoint": "/general",
     "agent_id": "general-agent",
     "instructions": "Respond helpfully to user queries about the data.",
-    "model": "claude",
+    "name": "General",
+    "description": "Respond helpfully to user queries about the data.",
+    "indicators": [],
+    "priority": 100,
+    "model": "claude-3-5-sonnet",
+    "temperature": 0.7
+  },
+  "/store-perf": {
+    "endpoint": "/store-perf",
+    "agent_id": "store-performance",
+    "instructions": "Analyze the provided insurance agency store's Profit and Loss (P&L) statement and performance data. Provide 5 high-level, actionable insights to improve profitability. Each insight should include a clear, concise recommendation for immediate implementation",
+    "name": "Store Performance Analysis",
+    "description": "Analysis for Store Performance related manners",
+    "indicators": [
+      "store",
+      "p&l",
+      "performance"
+    ],
+    "priority": 100,
+    "model": "claude-3-5-sonnet",
     "temperature": 0.7
   }
 }
