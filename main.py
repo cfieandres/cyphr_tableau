@@ -989,13 +989,16 @@ async def log_requests_middleware(request: FastAPIRequest, call_next):
             try:
                 import json
                 response_json = json.loads(response_data)
-            except:
-                pass
+                logging.info(f"Successfully parsed response as JSON: {list(response_json.keys())}")
+            except Exception as json_err:
+                logging.warning(f"Could not parse response as JSON: {str(json_err)}")
             
             # Get the model from the response if available
             model = None
             if isinstance(response_json, dict) and "model" in response_json:
                 model = response_json.get("model")
+                # Log the model we found for debugging
+                logging.info(f"Detected model in response: {model}")
             
             # Extract selected endpoint if available
             selected_endpoint = None
