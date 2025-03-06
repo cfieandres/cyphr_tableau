@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cyphr AI Extension - Server Management</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
+    <style>
+        /* Inline styles for quick development */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+        header {
+            background-color: #0d1829;
+            color: white;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 5px;
+        }
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f5f7fa;
+            font-weight: 600;
+        }
+        button {
+            background-color: #3182ce;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #2b6cb0;
+        }
+        form {
+            margin-top: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        textarea {
+            height: 100px;
+        }
+        .btn-submit {
+            background-color: #38a169;
+            margin-top: 10px;
+        }
+        .btn-submit:hover {
+            background-color: #2f855a;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>cyphr AI Extension - Server Management</h1>
+            <p>Configure AI endpoints and agent settings</p>
+        </header>
+
+        <div class="card">
+            <h2>Endpoint Configurations</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Endpoint</th>
+                        <th>Agent ID</th>
+                        <th>Model</th>
+                        <th>Temperature</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for config in configs %}
+                    <tr>
+                        <td>{{ config.endpoint }}</td>
+                        <td>{{ config.agent_id }}</td>
+                        <td>{{ config.model }}</td>
+                        <td>{{ config.temperature }}</td>
+                        <td>
+                            <button onclick="editConfig('{{ config.endpoint }}', '{{ config.agent_id }}', `{{ config.instructions }}`, '{{ config.model }}', {{ config.temperature }})">Edit</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button onclick="showNewConfigForm()">Add New Endpoint</button>
+        </div>
+
+        <div id="configFormCard" class="card hidden">
+            <h2 id="formTitle">Configure Endpoint</h2>
+            <form id="configForm" onsubmit="submitConfig(event)">
+                <input type="hidden" id="isNewConfig" value="false">
+                
+                <div class="form-group">
+                    <label for="endpoint">Endpoint:</label>
+                    <input type="text" id="endpoint" name="endpoint" required placeholder="e.g., /custom-analysis">
+                </div>
+                
+                <div class="form-group">
+                    <label for="agent_id">Agent ID:</label>
+                    <input type="text" id="agent_id" name="agent_id" required placeholder="e.g., custom-agent">
+                </div>
+                
+                <div class="form-group">
+                    <label for="instructions">Instructions:</label>
+                    <textarea id="instructions" name="instructions" required placeholder="Provide detailed instructions for the agent..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="model">Model:</label>
+                    <select id="model" name="model">
+                        <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (18K tokens)</option>
+                        <option value="mistral-large">Mistral Large (32K tokens)</option>
+                        <option value="mistral-large2">Mistral Large 2 (128K tokens)</option>
+                        <option value="reka-flash">Reka Flash (100K tokens)</option>
+                        <option value="deepseek-r1">DeepSeek R1 (32K tokens)</option>
+                        <option value="snowflake-arctic">Snowflake Arctic (4K tokens)</option>
+                    </select>
+                    <small style="display: block; margin-top: 5px; color: #666;">
+                        All models have 8,192 max output tokens. Choose based on your input size requirements.
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="temperature">Temperature:</label>
+                    <input type="number" id="temperature" name="temperature" step="0.1" min="0" max="1" value="0.7">
+                </div>
+                
+                <button type="submit" class="btn-submit">Save Configuration</button>
+                <button type="button" onclick="hideConfigForm()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showNewConfigForm() {
+            document.getElementById('formTitle').textContent = 'Add New Endpoint';
+            document.getElementById('isNewConfig').value = 'true';
+            document.getElementById('endpoint').value = '';
+            document.getElementById('endpoint').disabled = false;
+            document.getElementById('agent_id').value = '';
+            document.getElementById('instructions').value = '';
+            document.getElementById('model').value = 'claude-3-5-sonnet';
+            document.getElementById('temperature').value = '0.7';
+            document.getElementById('configFormCard').classList.remove('hidden');
+        }
+        
+        function editConfig(endpoint, agentId, instructions, model, temperature) {
+            document.getElementById('formTitle').textContent = 'Edit Endpoint Configuration';
+            document.getElementById('isNewConfig').value = 'false';
+            document.getElementById('endpoint').value = endpoint;
+            document.getElementById('endpoint').disabled = true;
+            document.getElementById('agent_id').value = agentId;
+            document.getElementById('instructions').value = instructions;
+            document.getElementById('model').value = model;
+            document.getElementById('temperature').value = temperature;
+            document.getElementById('configFormCard').classList.remove('hidden');
+        }
+        
+        function hideConfigForm() {
+            document.getElementById('configFormCard').classList.add('hidden');
+        }
+        
+        async function submitConfig(event) {
+            event.preventDefault();
+            
+            const formData = {
+                endpoint: document.getElementById('endpoint').value,
+                agent_id: document.getElementById('agent_id').value,
+                instructions: document.getElementById('instructions').value,
+                model: document.getElementById('model').value,
+                temperature: parseFloat(document.getElementById('temperature').value)
+            };
+            
+            try {
+                const response = await fetch('/manage/configure', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('Configuration saved successfully!');
+                    window.location.reload();
+                } else {
+                    alert('Error saving configuration.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error saving configuration.');
+            }
+        }
+    </script>
+</body>
+</html>

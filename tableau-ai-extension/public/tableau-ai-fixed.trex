@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+  <manifest manifest-version="0.1" xmlns="http://www.tableau.com/xml/extension_manifest">
+    <dashboard-extension id="com.cyphr.tableau-ai-extension" extension-version="1.0.0">
+      <default-locale>en_US</default-locale>
+      <name resource-id="name">cyphr AI Extension</name>
+      <description>AI-Driven Tableau Embedded Application powered by cyphr</description>
+      <author name="Andres Moreno" email="mor.qca@gmail.com" organization="cyphr" website="https://www.cyphr.ai"/>
+      <min-api-version>1.0</min-api-version>
+      <source-location>
+        <url>http://localhost:3000/</url>
+      </source-location>
+      <icon/>
+      <permissions>
+        <permission>full data</permission>
+      </permissions>
+    </dashboard-extension>
+    <resources>
+      <resource id="name">
+        <text locale="en_US">cyphr AI Extension</text>
+      </resource>
+    </resources>
+  </manifest>

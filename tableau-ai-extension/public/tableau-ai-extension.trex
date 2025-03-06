@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest manifest-version="0.1" xmlns="http://www.tableau.com/xml/extension_manifest">
+  <dashboard-extension id="com.example.tableau-ai-extension" extension-version="1.0.0">
+    <default-locale>en_US</default-locale>
+    <name resource-id="name">Tableau AI Extension</name>
+    <description>AI-Driven Tableau Embedded Application</description>
+    <author name="Your Name" email="your.email@example.com" organization="Your Organization" website="https://www.example.com"/>
+    <min-api-version>1.0</min-api-version>
+    <source-location>
+      <url>http://localhost:3000/</url>
+    </source-location>
+    <permissions>
+      <permission>full data</permission>
+    </permissions>
+  </dashboard-extension>
+  <resources>
+    <resource id="name">
+      <text locale="en_US">Tableau AI Extension</text>
+    </resource>
+  </resources>
+</manifest>

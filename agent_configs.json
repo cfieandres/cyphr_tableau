@@ -1,0 +1,23 @@
+{
+  "/analytics": {
+    "endpoint": "/analytics",
+    "agent_id": "analytics-agent",
+    "instructions": "Analyze data and provide comprehensive insights with bullet points.",
+    "model": "claude-3-5-sonnet",
+    "temperature": 0.5
+  },
+  "/summarization": {
+    "endpoint": "/summarization",
+    "agent_id": "summary-agent",
+    "instructions": "Create a concise summary of the provided data, highlighting key points.",
+    "model": "claude",
+    "temperature": 0.3
+  },
+  "/general": {
+    "endpoint": "/general",
+    "agent_id": "general-agent",
+    "instructions": "Respond helpfully to user queries about the data.",
+    "model": "claude",
+    "temperature": 0.7
+  }
+}
