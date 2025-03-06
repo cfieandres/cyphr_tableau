@@ -360,12 +360,28 @@ async def general(request: GeneralRequest):
                     
                     is_geo_question = any(indicator in question.lower() for indicator in geo_question_indicators)
                     
-                    # Basic prompt
-                    prompt = f"""Question: {question}
+                    # Check if we have conversation history from the session
+                    conversation_history = ""
+                    if isinstance(data_obj, dict) and "conversation_history" in data_obj:
+                        conversation_history = data_obj.get("conversation_history", "")
+                    
+                    # Basic prompt with or without conversation history
+                    if conversation_history:
+                        # Include conversation history for context continuity
+                        prompt = f"""Conversation history:
+{conversation_history}
+
+New question: {question}
 
 Dashboard Data:
 {anonymized_data}
+"""
+                    else:
+                        # No conversation history, just the question and data
+                        prompt = f"""Question: {question}
 
+Dashboard Data:
+{anonymized_data}
 """
                     
                     # Add specific instructions based on the question type
@@ -776,6 +792,7 @@ class RouteRequest(BaseModel):
     task_type: TaskType
     format_type: FormatType = FormatType.AUTO
     question: Optional[str] = None
+    session_id: Optional[str] = None
 
 @app.post("/route")
 async def route_endpoint(request: RouteRequest):
@@ -783,17 +800,29 @@ async def route_endpoint(request: RouteRequest):
     Route a request to the appropriate endpoint based on the task type.
     
     Args:
-        request: The request containing data, task type, format type, and optional question
+        request: The request containing data, task type, format type, optional question,
+                and optional session_id
         
     Returns:
         The response from the routed endpoint
     """
+    # Import the session manager
+    from session_manager import session_manager
+    
+    # Get or create a session for this request
+    session, created = session_manager.get_or_create_session(request.session_id)
+    session_id = session.id
+    
     # Log the incoming request for debugging
-    logging.info(f"Route endpoint request received - Task Type: {request.task_type}, Has Question: {bool(request.question)}")
+    logging.info(f"Route endpoint request received - Task Type: {request.task_type}, " +
+                f"Has Question: {bool(request.question)}, Session ID: {session_id}, New Session: {created}")
     
     # Special handling for requests with questions
     if request.question:
         logging.info(f"Processing request with question: '{request.question[:50]}...' if len > 50")
+        
+        # Add the user's question to the session history
+        session_manager.add_message(session_id, "user", request.question)
         
         try:
             # Parse the data as JSON if it's a string
@@ -806,10 +835,12 @@ async def route_endpoint(request: RouteRequest):
                     logging.warning("Question data is not valid JSON")
                     pass
             
-            # Create a data structure with the question and data
+            # Create a data structure with the question, data, and session info
             combined_data = {
                 "question": request.question,
-                "data": data_obj
+                "data": data_obj,
+                "session_id": session_id,
+                "conversation_history": session.get_prompt_context() if len(session.messages) > 1 else ""
             }
             
             # Convert to JSON string
@@ -819,20 +850,32 @@ async def route_endpoint(request: RouteRequest):
             if request.task_type == TaskType.AUTO:
                 logging.info("Auto task type with question - setting task hint for GENERAL endpoint")
                 # Use the combined data but hint that this is a question for scoring
-                return await route_request(data_json, TaskType.AUTO, request.format_type)
+                response = await route_request(data_json, TaskType.AUTO, request.format_type)
             else:
                 # Use the explicit task type (like GENERAL)
                 logging.info(f"Explicit task type {request.task_type} with question")
-                return await route_request(data_json, request.task_type, request.format_type)
+                response = await route_request(data_json, request.task_type, request.format_type)
+            
+            # Add the assistant's response to the session history
+            session_manager.add_message(session_id, "assistant", response.get("response", ""))
+            
+            # Add the session ID to the response
+            response["session_id"] = session_id
+            
+            return response
             
         except Exception as e:
             logging.error(f"Error processing route request with question: {e}")
             # Fall back to standard routing
-            return await route_request(request.data, request.task_type, request.format_type)
+            response = await route_request(request.data, request.task_type, request.format_type)
+            response["session_id"] = session_id
+            return response
     else:
         # Standard routing without question
         logging.info(f"Standard routing without question, task type: {request.task_type}")
-        return await route_request(request.data, request.task_type, request.format_type)
+        response = await route_request(request.data, request.task_type, request.format_type)
+        response["session_id"] = session_id
+        return response
 
 # HTTPS Setup
 import ssl
@@ -1086,6 +1129,79 @@ async def clear_logs_endpoint(days_to_keep: int = 30):
         Number of logs deleted
     """
     deleted_count = clear_logs(days_to_keep)
+    return {"deleted_count": deleted_count}
+
+# Session management endpoints
+from session_manager import session_manager
+
+@app.get("/sessions/{session_id}")
+async def get_session_info(session_id: str):
+    """
+    Get information about a specific session.
+    
+    Args:
+        session_id: The session ID
+        
+    Returns:
+        Session information including message history
+    """
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    return {
+        "session_id": session.id,
+        "created_at": session.created_at.isoformat(),
+        "last_active": session.last_active.isoformat(),
+        "messages": session.get_messages(),
+        "message_count": len(session.messages)
+    }
+
+@app.post("/sessions")
+async def create_session():
+    """
+    Create a new session.
+    
+    Returns:
+        The created session information
+    """
+    session, _ = session_manager.get_or_create_session()
+    
+    return {
+        "session_id": session.id,
+        "created_at": session.created_at.isoformat(),
+        "last_active": session.last_active.isoformat()
+    }
+
+@app.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """
+    Delete a specific session.
+    
+    Args:
+        session_id: The session ID
+        
+    Returns:
+        Success status
+    """
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Remove the session
+    del session_manager.sessions[session_id]
+    
+    return {"status": "success", "message": f"Session {session_id} deleted"}
+
+@app.post("/sessions/cleanup")
+async def cleanup_sessions():
+    """
+    Clean up expired sessions.
+    
+    Returns:
+        Number of sessions removed
+    """
+    deleted_count = session_manager.cleanup_expired_sessions()
     return {"deleted_count": deleted_count}
 
 if __name__ == "__main__":

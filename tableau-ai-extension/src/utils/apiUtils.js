@@ -13,9 +13,10 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:800
  * @param {Object} data - Data to be processed
  * @param {string} formatType - Response format type (auto, bullet, paragraph, json, raw)
  * @param {string} [question] - Optional question for general task type
+ * @param {string} [sessionId] - Optional session ID for conversation context
  * @returns {Promise<Object>} - API response
  */
-export const processData = async (taskType, data, formatType = 'auto', question = null) => {
+export const processData = async (taskType, data, formatType = 'auto', question = null, sessionId = null) => {
   try {
     // Format data as needed (convert to JSON string if it's an object)
     const dataString = typeof data === 'string' ? data : JSON.stringify(data);
@@ -30,6 +31,11 @@ export const processData = async (taskType, data, formatType = 'auto', question 
     // Add question if provided
     if (question) {
       requestBody.question = question;
+    }
+    
+    // Add session ID if provided
+    if (sessionId) {
+      requestBody.session_id = sessionId;
     }
     
     // Make the API request
@@ -103,5 +109,25 @@ export const checkApiHealth = async () => {
   } catch (error) {
     console.error('Error checking API health:', error);
     return false;
+  }
+};
+
+/**
+ * Get information about available API endpoints
+ * @returns {Promise<Array>} - Array of endpoint objects with metadata
+ */
+export const getApiEndpoints = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/endpoints`);
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.endpoints || [];
+  } catch (error) {
+    console.error('Error fetching API endpoints:', error);
+    // Return empty array as fallback
+    return [];
   }
 };

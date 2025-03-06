@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ChatDisplay from './components/ChatDisplay';
 import { getWorksheetData, getAllWorksheets } from './utils/tableauUtils';
-import { processData, checkApiHealth } from './utils/apiUtils';
+import { processData, checkApiHealth, getApiEndpoints } from './utils/apiUtils';
 import './App.css';
 
 /**
@@ -15,30 +15,50 @@ function App() {
   const [error, setError] = useState(null);
   const [tableauData, setTableauData] = useState(null);
   const [worksheets, setWorksheets] = useState([]);
-  const [selectedTaskType, setSelectedTaskType] = useState('analyze');
   const [apiConnected, setApiConnected] = useState(false);
   const [showQuestionInput, setShowQuestionInput] = useState(false);
+  const [username, setUsername] = useState('');
+  const [availableEndpoints, setAvailableEndpoints] = useState([]);
+  const [selectedEndpoint, setSelectedEndpoint] = useState(null);
+  const [lastQuestion, setLastQuestion] = useState('');
+  
+  // Session state for maintaining conversation history
+  const [sessionId, setSessionId] = useState(null);
 
-  // Initialize Tableau Extension API
+  // Initialize Tableau Extension API and create a session
   useEffect(() => {
     initializeTableauExtension();
     checkApiConnection();
+    
+    // Create a conversation session if we don't have one yet
+    if (!sessionId) {
+      createSession();
+    }
   }, []);
 
-  // Show question input when task type is 'general'
+  // Enable question input by default
   useEffect(() => {
-    setShowQuestionInput(selectedTaskType === 'general');
-  }, [selectedTaskType]);
+    setShowQuestionInput(true);
+  }, []);
 
   /**
-   * Check if the API server is connected
+   * Check if the API server is connected and get available endpoints
    */
   const checkApiConnection = async () => {
     try {
       const isHealthy = await checkApiHealth();
       setApiConnected(isHealthy);
       
-      if (!isHealthy) {
+      if (isHealthy) {
+        // Fetch available endpoints from the API
+        try {
+          const endpoints = await getApiEndpoints();
+          setAvailableEndpoints(endpoints);
+          console.log('Available endpoints:', endpoints);
+        } catch (endpointError) {
+          console.error('Error fetching endpoints:', endpointError);
+        }
+      } else {
         setError('Cannot connect to the AI API server. Please check that the server is running.');
       }
     } catch (error) {
@@ -61,6 +81,15 @@ function App() {
       const worksheetsList = getAllWorksheets();
       
       setWorksheets(worksheetsList);
+      
+      // Get current username if available
+      try {
+        if (window.tableau.extensions.environment && window.tableau.extensions.environment.currentUser) {
+          setUsername(window.tableau.extensions.environment.currentUser.username || '');
+        }
+      } catch (userError) {
+        console.log('Could not get username:', userError);
+      }
       
       // Set up event listeners for filtering and selection changes
       worksheetsList.forEach(worksheet => {
@@ -107,6 +136,8 @@ function App() {
       // Create a combined data object
       const combinedData = {
         dashboardName: window.tableau.extensions.dashboardContent.dashboard.name,
+        processingNotes: ['All geographical data and map visualizations have been excluded from analysis'],
+        excludedWorksheets: [],
         worksheets: []
       };
       
@@ -130,9 +161,20 @@ function App() {
       // Wait for all data to be fetched
       const worksheetResults = await Promise.all(worksheetDataPromises);
       
-      // Add successful results to the combined data
+      // Add results to the combined data, handling excluded map worksheets
       worksheetResults.forEach(result => {
-        if (result.data) {
+        if (!result.data) return;
+        
+        // Check if this worksheet was excluded (map visualization)
+        if (result.data.excluded) {
+          // Add to the excluded list
+          combinedData.excludedWorksheets.push({
+            name: result.name,
+            reason: result.data.note || "Geographical data excluded"
+          });
+          console.log(`Excluded worksheet from payload: ${result.name}`);
+        } else {
+          // Add to the regular worksheets
           combinedData.worksheets.push({
             name: result.name,
             data: result.data
@@ -140,9 +182,15 @@ function App() {
         }
       });
       
-      // Check if we got any data
+      // Check if we got any usable data 
       if (combinedData.worksheets.length === 0) {
-        throw new Error('Could not fetch data from any worksheet');
+        // Check if we have excluded worksheets but no regular worksheets
+        if (combinedData.excludedWorksheets && combinedData.excludedWorksheets.length > 0) {
+          // All worksheets were excluded due to geographical data
+          throw new Error('All worksheets contain geographical data and were excluded from analysis');
+        } else {
+          throw new Error('Could not fetch data from any worksheet');
+        }
       }
       
       setTableauData(combinedData);
@@ -155,6 +203,27 @@ function App() {
       return null;
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Create a new session for conversation history
+   */
+  const createSession = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000'}/sessions`, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSessionId(data.session_id);
+        console.log(`Created new conversation session: ${data.session_id}`);
+      } else {
+        console.error('Failed to create session');
+      }
+    } catch (error) {
+      console.error('Error creating session:', error);
     }
   };
 
@@ -177,15 +246,34 @@ function App() {
       }
     }
     
+    // Ensure we have a session ID for conversation history
+    if (!sessionId && question) {
+      await createSession();
+    }
+    
     try {
       setLoading(true);
       setError(null);
       
-      // Call the API to process the data, passing the question if provided
-      const result = await processData(taskType, data, 'auto', question);
+      // Call the API to process the data, passing the question and session ID if provided
+      const result = await processData(taskType, data, 'auto', question, sessionId);
       
       // Update the response
       setResponse(result.response);
+      
+      // Update the selected endpoint if it was returned
+      if (result.selected_endpoint) {
+        setSelectedEndpoint(result.selected_endpoint);
+        console.log(`Server selected endpoint: ${result.selected_endpoint}`);
+      } else {
+        setSelectedEndpoint(null);
+      }
+      
+      // Update session ID if it was returned
+      if (result.session_id && result.session_id !== sessionId) {
+        setSessionId(result.session_id);
+        console.log(`Updated session ID: ${result.session_id}`);
+      }
     } catch (error) {
       console.error('Error processing data with AI:', error);
       setError(`Failed to process data: ${error.message}`);
@@ -196,22 +284,13 @@ function App() {
 
 
   /**
-   * Handle task type selection change
-   * @param {Object} event - Change event
-   */
-  const handleTaskTypeChange = (event) => {
-    setSelectedTaskType(event.target.value);
-    // Clear previous results when changing task type
-    setResponse('');
-  };
-
-  /**
    * Handle button click to process data
    */
   const handleProcessClick = async () => {
     const data = await fetchTableauData();
     if (data) {
-      await processDataWithAI(selectedTaskType, data);
+      // Let the backend determine the task type based on dashboard data
+      await processDataWithAI('auto', data);
     }
   };
 
@@ -220,9 +299,29 @@ function App() {
    * @param {string} question - The question asked by the user
    */
   const handleAskQuestion = async (question) => {
+    // Validate the question
+    if (!question || question.trim() === '') {
+      console.error('Empty question submitted');
+      setError('Please enter a question before submitting');
+      return;
+    }
+    
+    console.log(`User asked: "${question}"`);
+    
+    // Save the question for display
+    setLastQuestion(question);
+    
+    // Clear any previous errors and set loading state
+    setError(null);
+    
+    // Get data if needed
     const data = tableauData || await fetchTableauData();
     if (data) {
-      await processDataWithAI('general', data, question);
+      // Pass question but let backend determine task type
+      // The 'auto' task type should trigger question handling on the backend
+      await processDataWithAI('auto', data, question);
+    } else {
+      setError('Unable to fetch data to answer your question');
     }
   };
 
@@ -231,23 +330,11 @@ function App() {
       <header className="App-header">
         <h1>cyphr</h1>
         <div className="subtitle">AI-powered insights for Tableau</div>
+        {username && <div className="username">Hi, {username} 👋</div>}
       </header>
       
       <main>
-        <div className="controls">
-          <div className="control-group">
-            <label htmlFor="taskType">Task:</label>
-            <select 
-              id="taskType"
-              value={selectedTaskType}
-              onChange={handleTaskTypeChange}
-            >
-              <option value="analyze">Analyze Data</option>
-              <option value="summarize">Summarize Data</option>
-              <option value="general">Ask Question</option>
-            </select>
-          </div>
-          
+        <div className="controls">          
           <button 
             className="process-button"
             onClick={handleProcessClick}
@@ -272,7 +359,7 @@ function App() {
         <ChatDisplay 
           response={response} 
           loading={loading}
-          onAskQuestion={showQuestionInput ? handleAskQuestion : null}
+          onAskQuestion={handleAskQuestion}
         />
       </main>
       
@@ -282,6 +369,21 @@ function App() {
           <span className="status-text">
             {apiConnected ? 'Connected to AI server' : 'Not connected to AI server'}
           </span>
+          {selectedEndpoint && (
+            <span className="endpoint-indicator">
+              Using: {selectedEndpoint}
+            </span>
+          )}
+          {sessionId && (
+            <span className="session-indicator">
+              Session Active
+            </span>
+          )}
+          {lastQuestion && selectedEndpoint === 'general' && (
+            <span className="question-indicator">
+              Q: "{lastQuestion.length > 30 ? lastQuestion.substring(0, 30) + '...' : lastQuestion}"
+            </span>
+          )}
         </div>
       </footer>
     </div>
