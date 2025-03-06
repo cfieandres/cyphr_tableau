@@ -77,7 +77,7 @@ async def list_endpoints():
     return {"endpoints": endpoints}
 
 # AI processing endpoints
-from process_with_claude import SnowflakeLLMProcessor
+from snowflake_llm_processor import SnowflakeLLMProcessor
 from pydantic import BaseModel
 
 class DataRequest(BaseModel):

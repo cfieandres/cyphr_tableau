@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Import the FastAPI app and necessary components
 from main import app, FormatType
-from process_with_claude import SnowflakeLLMProcessor
+from snowflake_llm_processor import SnowflakeLLMProcessor
 
 # Create a test client
 client = TestClient(app)

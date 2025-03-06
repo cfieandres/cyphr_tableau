@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Import the components to test
 from submit_data import DataSubmitter
-from process_with_claude import SnowflakeLLMProcessor
+from snowflake_llm_processor import SnowflakeLLMProcessor
 from format_response import format_response
 
 

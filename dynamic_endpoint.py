@@ -9,7 +9,7 @@ import logging
 from database.db import db
 
 # Import the LLM processor
-from process_with_claude import SnowflakeLLMProcessor
+from snowflake_llm_processor import SnowflakeLLMProcessor
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
