@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, Form, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Optional, List
 from enum import Enum
@@ -106,7 +106,8 @@ class AnalyticsRequest(BaseModel):
     data: str
     format_type: FormatType = FormatType.AUTO
 
-from anonymize_data import anonymize_data
+# No anonymization needed since all data is internal
+# from anonymize_data import anonymize_data
 
 @app.post("/analytics")
 async def analytics(request: AnalyticsRequest):
@@ -119,8 +120,8 @@ async def analytics(request: AnalyticsRequest):
     Returns:
         JSON response with Claude's analytics
     """
-    # Anonymize sensitive data
-    anonymized_data = anonymize_data(request.data)
+    # No anonymization needed - data is internal only
+    anonymized_data = request.data
     
     # Try to parse the data to detect if it's combined worksheet data
     try:
@@ -208,8 +209,8 @@ async def summarization(request: SummarizationRequest):
     Returns:
         JSON response with Claude's summary
     """
-    # Anonymize sensitive data
-    anonymized_data = anonymize_data(request.data)
+    # No anonymization needed - data is internal only
+    anonymized_data = request.data
     
     # Try to parse the data to detect if it's combined worksheet data
     try:
@@ -350,8 +351,8 @@ async def general(request: GeneralRequest):
                         
                         formatted_data += "\n"
                     
-                    # Anonymize sensitive data
-                    anonymized_data = anonymize_data(formatted_data)
+                    # No anonymization needed - data is internal only
+                    anonymized_data = formatted_data
                     
                     # Check if the question is about geographical data
                     geo_question_indicators = ['where', 'location', 'map', 'region', 'geographical', 'geography',
@@ -376,9 +377,9 @@ Dashboard Data:
                     prompt += """
 """
                 else:
-                    # Regular data format, convert to JSON string for anonymization
+                    # Regular data format, convert to JSON string (no anonymization needed)
                     data_str = json.dumps(data, indent=2)
-                    anonymized_data = anonymize_data(data_str)
+                    anonymized_data = data_str
                     prompt = f"Question: {question}\n\nData:\n{anonymized_data}\n\nPlease answer the question using only the data provided."
                 
                 # Process with Claude using endpoint-specific configuration
@@ -404,7 +405,7 @@ Dashboard Data:
     
     # If there's an explicit question in the request model
     if request.question:
-        anonymized_data = anonymize_data(request.data)
+        anonymized_data = request.data
         
         # Try to parse the data to detect if it's combined worksheet data
         try:
@@ -439,8 +440,8 @@ Please answer the question based solely on the dashboard data provided. Be speci
             # Not valid JSON or not the expected structure, use standard prompt
             prompt = f"Question: {request.question}\n\nData:\n{anonymized_data}\n\nPlease answer the question using only the data provided."
     else:
-        # No question, use the data directly as prompt
-        anonymized_data = anonymize_data(request.data)
+        # No question, use the data directly as prompt (no anonymization needed)
+        anonymized_data = request.data
         prompt = anonymized_data
     
     # Process with Claude using endpoint-specific configuration
@@ -861,6 +862,223 @@ def setup_https():
     ssl_context.load_cert_chain(cert_file, key_file)
     
     return ssl_context
+
+# Monitoring and logging endpoints
+from request_logs import log_request, get_logs, get_log_by_id, get_stats, estimate_tokens, clear_logs
+from fastapi import Request as FastAPIRequest
+from fastapi import Depends, HTTPException, Query
+from typing import List, Optional, Set
+import time
+
+# Middleware for logging requests
+@app.middleware("http")
+async def log_requests_middleware(request: FastAPIRequest, call_next):
+    """Middleware to log requests and responses."""
+    # Skip logging for static files and monitoring endpoints
+    if request.url.path.startswith("/static") or request.url.path.startswith("/monitor"):
+        return await call_next(request)
+    
+    # Get client IP
+    client_host = request.client.host if request.client else None
+    
+    # Start timing
+    start_time = time.time()
+    
+    # Process the request
+    try:
+        # Get the request body
+        body = await request.body()
+        request_data = body.decode() if body else ""
+        
+        # Process the request
+        response = await call_next(request)
+        
+        # Only log API endpoints
+        if (request.url.path.startswith("/analytics") or 
+            request.url.path.startswith("/summarization") or 
+            request.url.path.startswith("/general") or
+            request.url.path.startswith("/route")):
+            
+            # Calculate execution time
+            execution_time = int((time.time() - start_time) * 1000)
+            
+            # Get the response body
+            response_body = b""
+            async for chunk in response.body_iterator:
+                response_body += chunk
+            
+            # Decode the response body
+            response_data = response_body.decode()
+            
+            # Try to parse the response as JSON
+            response_json = {}
+            try:
+                import json
+                response_json = json.loads(response_data)
+            except:
+                pass
+            
+            # Get the model from the response if available
+            model = None
+            if isinstance(response_json, dict) and "model" in response_json:
+                model = response_json.get("model")
+            
+            # Extract selected endpoint if available
+            selected_endpoint = None
+            if isinstance(response_json, dict) and "selected_endpoint" in response_json:
+                selected_endpoint = response_json.get("selected_endpoint")
+            
+            # Estimate token counts
+            input_tokens = estimate_tokens(request_data)
+            output_tokens = estimate_tokens(response_data)
+            
+            # Log the request
+            log_id = log_request(
+                endpoint=request.url.path,
+                prompt_data=request_data,
+                response=response_data,
+                selected_endpoint=selected_endpoint,
+                execution_time_ms=execution_time,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model=model,
+                status="success",
+                client_ip=client_host
+            )
+            
+            # Create a new response with the same content
+            return Response(
+                content=response_body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.media_type
+            )
+        
+        return response
+        
+    except Exception as e:
+        # Log the error
+        execution_time = int((time.time() - start_time) * 1000)
+        
+        # If we have request data, log it
+        if request.url.path.startswith(("/analytics", "/summarization", "/general", "/route")):
+            log_request(
+                endpoint=request.url.path,
+                prompt_data=request_data if 'request_data' in locals() else "",
+                response=str(e),
+                execution_time_ms=execution_time,
+                status="error",
+                client_ip=client_host
+            )
+        
+        # Re-raise the exception
+        raise
+
+# Monitoring UI endpoints
+@app.get("/monitor", response_class=HTMLResponse)
+async def monitor_ui(
+    request: FastAPIRequest,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    model: Optional[str] = None,
+    status: Optional[str] = None
+):
+    """
+    Monitoring dashboard UI endpoint.
+    
+    Args:
+        request: The FastAPI request object
+        limit: Maximum number of logs to return
+        offset: Offset for pagination
+        start_date: Start date for filtering (ISO format)
+        end_date: End date for filtering (ISO format)
+        endpoint: Filter by endpoint
+        model: Filter by model
+        status: Filter by status
+        
+    Returns:
+        HTML response with the monitoring dashboard
+    """
+    # Get logs with filters
+    logs = get_logs(
+        limit=limit,
+        offset=offset,
+        start_date=start_date,
+        end_date=end_date,
+        endpoint=endpoint,
+        model=model,
+        status=status
+    )
+    
+    # Get statistics
+    stats = get_stats()
+    
+    # Get unique endpoints and models for filtering
+    endpoints = set()
+    models = set()
+    
+    for log in logs:
+        if log["endpoint"]:
+            endpoints.add(log["endpoint"])
+        if log["model"]:
+            models.add(log["model"])
+    
+    # Render the template
+    return templates.TemplateResponse(
+        "monitor.html", 
+        {
+            "request": request, 
+            "logs": logs,
+            "stats": stats,
+            "limit": limit,
+            "offset": offset,
+            "endpoints": sorted(endpoints),
+            "models": sorted(models)
+        }
+    )
+
+@app.get("/monitor/log/{log_id}")
+async def get_log(log_id: int):
+    """
+    Get a specific log entry by ID.
+    
+    Args:
+        log_id: The ID of the log entry to retrieve
+        
+    Returns:
+        The log entry
+    """
+    log = get_log_by_id(log_id)
+    if not log:
+        raise HTTPException(status_code=404, detail="Log not found")
+    return log
+
+@app.get("/monitor/stats")
+async def get_stats_endpoint():
+    """
+    Get statistics about the logged requests.
+    
+    Returns:
+        Dictionary containing statistics
+    """
+    return get_stats()
+
+@app.post("/monitor/clear")
+async def clear_logs_endpoint(days_to_keep: int = 30):
+    """
+    Clear logs older than the specified number of days.
+    
+    Args:
+        days_to_keep: Number of days of logs to keep
+        
+    Returns:
+        Number of logs deleted
+    """
+    deleted_count = clear_logs(days_to_keep)
+    return {"deleted_count": deleted_count}
 
 if __name__ == "__main__":
     # Get settings from environment variables

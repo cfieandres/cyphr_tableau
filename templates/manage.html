@@ -22,6 +22,22 @@
             margin-bottom: 30px;
             border-radius: 5px;
         }
+        .nav-links {
+            margin-top: 10px;
+        }
+        .nav-links a {
+            color: #cbd5e0;
+            margin-right: 20px;
+            text-decoration: none;
+        }
+        .nav-links a:hover {
+            color: white;
+            text-decoration: underline;
+        }
+        .nav-links a.active {
+            color: white;
+            font-weight: bold;
+        }
         h1 {
             margin: 0;
             font-size: 24px;
@@ -101,6 +117,11 @@
         <header>
             <h1>cyphr AI Extension - Server Management</h1>
             <p>Configure AI endpoints and agent settings</p>
+            <div class="nav-links">
+                <a href="/manage" class="active">Agent Configuration</a>
+                <a href="/monitor">Monitoring</a>
+                <a href="/health">Health Check</a>
+            </div>
         </header>
 
         <div class="card">
@@ -109,7 +130,9 @@
                 <thead>
                     <tr>
                         <th>Endpoint</th>
-                        <th>Agent ID</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Priority</th>
                         <th>Model</th>
                         <th>Temperature</th>
                         <th>Actions</th>
@@ -119,11 +142,13 @@
                     {% for config in configs %}
                     <tr>
                         <td>{{ config.endpoint }}</td>
-                        <td>{{ config.agent_id }}</td>
+                        <td>{{ config.name }}</td>
+                        <td>{{ config.description }}</td>
+                        <td>{{ config.priority }}</td>
                         <td>{{ config.model }}</td>
                         <td>{{ config.temperature }}</td>
                         <td>
-                            <button onclick="editConfig('{{ config.endpoint }}', '{{ config.agent_id }}', `{{ config.instructions }}`, '{{ config.model }}', {{ config.temperature }})">Edit</button>
+                            <button onclick="editConfig('{{ config.endpoint }}', '{{ config.agent_id }}', `{{ config.instructions }}`, '{{ config.name }}', '{{ config.description }}', {{ config.priority }}, {{ config.indicators }}, '{{ config.model }}', {{ config.temperature }})">Edit</button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -145,6 +170,29 @@
                 <div class="form-group">
                     <label for="agent_id">Agent ID:</label>
                     <input type="text" id="agent_id" name="agent_id" required placeholder="e.g., custom-agent">
+                </div>
+                
+                <div class="form-group">
+                    <label for="name">Display Name:</label>
+                    <input type="text" id="name" name="name" required placeholder="e.g., Custom Analysis">
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Description:</label>
+                    <input type="text" id="description" name="description" required placeholder="Brief description of what this endpoint does">
+                </div>
+                
+                <div class="form-group">
+                    <label for="priority">Priority (lower = higher priority):</label>
+                    <input type="number" id="priority" name="priority" required min="1" max="1000" value="100">
+                </div>
+                
+                <div class="form-group">
+                    <label for="indicators">Indicators (comma-separated keywords):</label>
+                    <input type="text" id="indicators" name="indicators" placeholder="e.g., custom, analysis, insight">
+                    <small style="display: block; margin-top: 5px; color: #666;">
+                        These keywords help determine when this endpoint should be selected automatically
+                    </small>
                 </div>
                 
                 <div class="form-group">
@@ -185,18 +233,33 @@
             document.getElementById('endpoint').value = '';
             document.getElementById('endpoint').disabled = false;
             document.getElementById('agent_id').value = '';
+            document.getElementById('name').value = '';
+            document.getElementById('description').value = '';
+            document.getElementById('priority').value = '100';
+            document.getElementById('indicators').value = '';
             document.getElementById('instructions').value = '';
             document.getElementById('model').value = 'claude-3-5-sonnet';
             document.getElementById('temperature').value = '0.7';
             document.getElementById('configFormCard').classList.remove('hidden');
         }
         
-        function editConfig(endpoint, agentId, instructions, model, temperature) {
+        function editConfig(endpoint, agentId, instructions, name, description, priority, indicators, model, temperature) {
             document.getElementById('formTitle').textContent = 'Edit Endpoint Configuration';
             document.getElementById('isNewConfig').value = 'false';
             document.getElementById('endpoint').value = endpoint;
             document.getElementById('endpoint').disabled = true;
             document.getElementById('agent_id').value = agentId;
+            document.getElementById('name').value = name || '';
+            document.getElementById('description').value = description || '';
+            document.getElementById('priority').value = priority || 100;
+            
+            // Convert indicators array to comma-separated string
+            let indicatorsStr = '';
+            if (Array.isArray(indicators) && indicators.length > 0) {
+                indicatorsStr = indicators.join(', ');
+            }
+            document.getElementById('indicators').value = indicatorsStr;
+            
             document.getElementById('instructions').value = instructions;
             document.getElementById('model').value = model;
             document.getElementById('temperature').value = temperature;
@@ -210,9 +273,20 @@
         async function submitConfig(event) {
             event.preventDefault();
             
+            // Process indicators into an array
+            const indicatorsStr = document.getElementById('indicators').value;
+            const indicatorsArray = indicatorsStr
+                .split(',')
+                .map(item => item.trim())
+                .filter(item => item !== '');
+                
             const formData = {
                 endpoint: document.getElementById('endpoint').value,
                 agent_id: document.getElementById('agent_id').value,
+                name: document.getElementById('name').value,
+                description: document.getElementById('description').value,
+                priority: parseInt(document.getElementById('priority').value) || 100,
+                indicators: indicatorsArray,
                 instructions: document.getElementById('instructions').value,
                 model: document.getElementById('model').value,
                 temperature: parseFloat(document.getElementById('temperature').value)
