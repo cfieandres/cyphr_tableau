@@ -192,9 +192,9 @@ class SnowflakeLLMProcessor:
             
             # Construct full prompt with system message if available
             if system_message:
-                final_prompt = f"System: {system_message}\n\nData to analyze:{processed_prompt}\n\nPlease analyze this data and provide your response:"
+                final_prompt = f"System: {system_message}\n\n{processed_prompt}"
             else:
-                final_prompt = f"Data to analyze:{processed_prompt}\n\nPlease analyze this data and provide your response:"
+                final_prompt = processed_prompt
             
             logger.info(f"Processing data with model: {model}")
             logger.debug(f"Temperature: {temperature}, Max Tokens: {max_tokens}")
@@ -319,7 +319,7 @@ class SnowflakeLLMProcessor:
                 logger.warning(f"Error during environment check: {str(e)}")
             
             # Create system message and user prompt
-            prompt = f"System: {system_message}\n\nData to analyze:{data}\n\nPlease analyze this data and provide your response:"
+            prompt = f"System: {system_message}\n\n{data}"
             
             # Direct call to Cortex function - simpler syntax
             logger.info("Using SNOWFLAKE.CORTEX.COMPLETE function")

@@ -43,6 +43,36 @@ async def health_check():
     """Health check endpoint for monitoring."""
     return {"status": "healthy"}
 
+@app.get("/endpoints")
+async def list_endpoints():
+    """Return information about available API endpoints and their capabilities."""
+    # Get all registered agent configurations
+    configs = agent_config_manager.get_all_configs()
+    
+    # Format the endpoints for the response
+    endpoints = []
+    for endpoint, settings in configs.items():
+        # Skip internal endpoints that start with underscore
+        if endpoint.startswith('_'):
+            continue
+            
+        # Get the endpoint ID without the leading slash
+        endpoint_id = endpoint[1:] if endpoint.startswith('/') else endpoint
+        
+        # Create the endpoint info
+        endpoints.append({
+            "id": endpoint_id,
+            "name": settings.name,
+            "description": settings.description,
+            "indicators": settings.indicators,
+            "priority": settings.priority
+        })
+    
+    # Sort by priority
+    endpoints.sort(key=lambda ep: ep.get("priority", 100))
+    
+    return {"endpoints": endpoints}
+
 # AI processing endpoints
 from process_with_claude import SnowflakeLLMProcessor
 from pydantic import BaseModel
@@ -57,7 +87,7 @@ llm_processor = SnowflakeLLMProcessor()
 # Set up logging configuration
 import logging
 logging.basicConfig(
-    level=logging.INFO if os.getenv("CYPHR_DEBUG", "false").lower() == "true" else logging.WARNING,
+    level=logging.INFO,  # Always use INFO level for better visibility
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
@@ -100,6 +130,14 @@ async def analytics(request: AnalyticsRequest):
             dashboard_name = data_obj.get('dashboardName', 'Dashboard')
             formatted_data = f"# {dashboard_name}\n\n"
             
+            # Add processing notes if available
+            if 'processingNotes' in data_obj and isinstance(data_obj['processingNotes'], list):
+                formatted_data += "## Processing Notes\n\n"
+                for note in data_obj['processingNotes']:
+                    formatted_data += f"- {note}\n"
+                formatted_data += "\n"
+            
+            # Add regular worksheets
             for worksheet in data_obj['worksheets']:
                 ws_name = worksheet.get('name', 'Unnamed Worksheet')
                 ws_data = worksheet.get('data', {})
@@ -107,21 +145,30 @@ async def analytics(request: AnalyticsRequest):
                 # Format each worksheet section
                 formatted_data += f"## {ws_name}\n"
                 
+                # Add any notes about the data
+                if 'note' in ws_data:
+                    formatted_data += f"*{ws_data['note']}*\n\n"
+                
                 # Convert worksheet data to a readable format
                 ws_data_str = json.dumps(ws_data, indent=2)
                 formatted_data += f"```\n{ws_data_str}\n```\n\n"
+            
+            # Add information about excluded worksheets if any
+            if 'excludedWorksheets' in data_obj and data_obj['excludedWorksheets']:
+                formatted_data += "## Excluded Worksheets (Geographical Data)\n\n"
+                formatted_data += "The following worksheets were excluded because they contain geographical data:\n\n"
+                
+                for excluded in data_obj['excludedWorksheets']:
+                    worksheet_name = excluded.get('name', 'Unnamed')
+                    reason = excluded.get('reason', 'Contains geographical data')
+                    formatted_data += f"- **{worksheet_name}**: {reason}\n"
+                
+                formatted_data += "\n"
             
             # Create a prompt for analytics with the formatted data
             prompt = f"""Analyze the following Tableau dashboard data and provide comprehensive insights:
 
 {formatted_data}
-
-Provide insights about:
-1. Key trends and patterns across worksheets
-2. Notable correlations or relationships
-3. Anomalies or outliers
-4. Potential business implications
-5. Suggestions for further analysis
 
 Make your analysis specific and data-driven."""
         else:
@@ -186,13 +233,7 @@ async def summarization(request: SummarizationRequest):
             # Create a prompt for summarization with the formatted data
             prompt = f"""Provide a concise summary of the following Tableau dashboard data:
 
-{formatted_data}
-
-Your summary should:
-1. Highlight the key information presented in each worksheet
-2. Provide an overall perspective on what the dashboard is showing
-3. Be clear, concise, and focused on the most important points
-4. Use bullet points for clarity where appropriate"""
+{formatted_data}"""
         else:
             # Regular data format
             prompt = f"Provide a concise summary of the following data:\n\n{anonymized_data}"
@@ -245,6 +286,14 @@ async def general(request: GeneralRequest):
                     dashboard_name = data.get('dashboardName', 'Dashboard')
                     formatted_data = f"# {dashboard_name}\n\n"
                     
+                    # Add processing notes if available
+                    if 'processingNotes' in data and isinstance(data['processingNotes'], list):
+                        formatted_data += "## Processing Notes\n\n"
+                        for note in data['processingNotes']:
+                            formatted_data += f"- {note}\n"
+                        formatted_data += "\n"
+                    
+                    # Add regular worksheets
                     for worksheet in data['worksheets']:
                         ws_name = worksheet.get('name', 'Unnamed Worksheet')
                         ws_data = worksheet.get('data', {})
@@ -252,20 +301,80 @@ async def general(request: GeneralRequest):
                         # Format each worksheet section
                         formatted_data += f"## {ws_name}\n"
                         
-                        # Convert worksheet data to a readable format
-                        ws_data_str = json.dumps(ws_data, indent=2)
+                        # Add any notes about the data
+                        if 'note' in ws_data:
+                            formatted_data += f"*{ws_data['note']}*\n\n"
+                        
+                        # Check for optimized data structure with constants and column mappings
+                        has_optimized_format = 'constants' in ws_data and 'columnMapping' in ws_data
+                        
+                        if has_optimized_format:
+                            # Create a more readable, token-efficient representation
+                            formatted_data += "**Column Name Mappings:**\n"
+                            for original, short in ws_data.get('columnMapping', {}).items():
+                                if original != short:  # Only show actual mappings
+                                    formatted_data += f"- `{short}` represents `{original}`\n"
+                            formatted_data += "\n"
+                            
+                            # Add constant values that apply to all rows
+                            if ws_data.get('constants'):
+                                formatted_data += "**Constant Values (apply to all rows):**\n"
+                                for key, value in ws_data.get('constants', {}).items():
+                                    formatted_data += f"- `{key}`: {value}\n"
+                                formatted_data += "\n"
+                            
+                            # Add sampling information if data was sampled
+                            if ws_data.get('sampling'):
+                                sampling = ws_data.get('sampling')
+                                formatted_data += f"**Sampling Information:** Showing {sampling.get('sampledRows')} rows out of {sampling.get('totalRows')} total (sampling rate: 1/{sampling.get('samplingRate')})\n\n"
+                            
+                            # Only show rows, not the full metadata
+                            display_data = {
+                                "rows": ws_data.get('rows', [])
+                            }
+                            ws_data_str = json.dumps(display_data, indent=2)
+                        else:
+                            # Use the original format
+                            ws_data_str = json.dumps(ws_data, indent=2)
                         formatted_data += f"```\n{ws_data_str}\n```\n\n"
+                    
+                    # Add information about excluded worksheets if any
+                    if 'excludedWorksheets' in data and data['excludedWorksheets']:
+                        formatted_data += "## Excluded Worksheets (Geographical Data)\n\n"
+                        formatted_data += "The following worksheets were excluded because they contain geographical data:\n\n"
+                        
+                        for excluded in data['excludedWorksheets']:
+                            worksheet_name = excluded.get('name', 'Unnamed')
+                            reason = excluded.get('reason', 'Contains geographical data')
+                            formatted_data += f"- **{worksheet_name}**: {reason}\n"
+                        
+                        formatted_data += "\n"
                     
                     # Anonymize sensitive data
                     anonymized_data = anonymize_data(formatted_data)
                     
-                    # Create a prompt with the question and formatted data
+                    # Check if the question is about geographical data
+                    geo_question_indicators = ['where', 'location', 'map', 'region', 'geographical', 'geography',
+                                              'country', 'city', 'state', 'address', 'place', 'area']
+                    
+                    is_geo_question = any(indicator in question.lower() for indicator in geo_question_indicators)
+                    
+                    # Basic prompt
                     prompt = f"""Question: {question}
 
 Dashboard Data:
 {anonymized_data}
 
-Please answer the question based solely on the dashboard data provided. Be specific and refer to the worksheet data where relevant. If the question cannot be answered with the available data, explain why."""
+"""
+                    
+                    # Add specific instructions based on the question type
+                    if is_geo_question:
+                        prompt += """Note: Geographical data and map visualizations have been completely excluded. If the question requires location information that isn't visible in the provided data, please explicitly mention this limitation in your answer.
+
+"""
+                    
+                    prompt += """
+"""
                 else:
                     # Regular data format, convert to JSON string for anonymization
                     data_str = json.dumps(data, indent=2)
@@ -374,6 +483,10 @@ async def manage_ui(request: Request):
             "endpoint": endpoint,
             "agent_id": settings.agent_id,
             "instructions": settings.instructions,
+            "name": settings.name,
+            "description": settings.description,
+            "indicators": settings.indicators,
+            "priority": settings.priority,
             "model": settings.model,
             "temperature": settings.temperature
         }
@@ -391,7 +504,11 @@ class ConfigureRequest(BaseModel):
     endpoint: str
     agent_id: str
     instructions: str
-    model: str = "claude"
+    name: str
+    description: str
+    indicators: List[str] = []
+    priority: int = 100
+    model: str = "claude-3-5-sonnet"
     temperature: float = 0.7
 
 @app.post("/manage/configure")
@@ -410,6 +527,10 @@ async def configure_agent(request: ConfigureRequest):
         endpoint=request.endpoint,
         agent_id=request.agent_id,
         instructions=request.instructions,
+        name=request.name,
+        description=request.description,
+        indicators=request.indicators,
+        priority=request.priority,
         model=request.model,
         temperature=request.temperature
     )
@@ -422,6 +543,7 @@ from enum import Enum
 
 class TaskType(str, Enum):
     """Enum for the different types of tasks that can be routed."""
+    AUTO = "auto"  # Automatically determine the task type based on dashboard data
     ANALYTICS = "analyze"
     SUMMARIZATION = "summarize"
     GENERAL = "general"
@@ -453,14 +575,197 @@ async def route_request(data: str, task_type: TaskType, format_type: FormatType 
         # Not a valid JSON or doesn't have the expected structure
         pass
     
+    # Log the incoming data (anonymized or truncated for privacy)
+    try:
+        if isinstance(data, str):
+            data_size = len(data)
+            logging.info(f"Received payload size: {data_size} bytes")
+            
+            try:
+                # Try to parse as JSON to log structure without full content
+                data_obj_log = json.loads(data)
+                if isinstance(data_obj_log, dict):
+                    # Log the keys but not all the values
+                    keys_list = list(data_obj_log.keys())
+                    logging.info(f"Payload structure: {keys_list}")
+                    
+                    # Check for specific important fields
+                    if 'dashboardName' in data_obj_log:
+                        logging.info(f"Dashboard name: {data_obj_log.get('dashboardName')}")
+                    if 'question' in data_obj_log:
+                        question_preview = data_obj_log.get('question', '')[:50]
+                        if len(data_obj_log.get('question', '')) > 50:
+                            question_preview += "..."
+                        logging.info(f"Question: {question_preview}")
+                    if 'worksheets' in data_obj_log and isinstance(data_obj_log['worksheets'], list):
+                        worksheet_names = [ws.get('name', 'Unnamed') for ws in data_obj_log['worksheets']]
+                        logging.info(f"Worksheets: {worksheet_names}")
+            except json.JSONDecodeError:
+                # Not JSON, just log length
+                logging.info("Payload is not in JSON format")
+    except Exception as e:
+        logging.error(f"Error logging request data: {e}")
+    
+    # Auto-determine the task type based on dashboard data if AUTO is specified
+    if task_type == TaskType.AUTO:
+        logging.info("=== AUTO TASK TYPE DETECTION STARTED ===")
+        # Try to parse the data to determine dashboard characteristics
+        try:
+            # Get all available endpoint configurations
+            all_configs = agent_config_manager.get_all_configs()
+            logging.info(f"Available endpoints: {list(all_configs.keys())}")
+            
+            # Create a mapping of endpoint IDs to task types
+            endpoint_to_tasktype = {}
+            for endpoint, settings in all_configs.items():
+                # Remove leading slash and convert to uppercase for TaskType enum
+                endpoint_id = endpoint.strip('/').upper()
+                if hasattr(TaskType, endpoint_id):
+                    endpoint_to_tasktype[endpoint] = getattr(TaskType, endpoint_id)
+            
+            # Default to ANALYTICS if available, otherwise use the first available endpoint
+            default_endpoint = "/analytics"
+            if default_endpoint not in endpoint_to_tasktype and endpoint_to_tasktype:
+                default_endpoint = next(iter(endpoint_to_tasktype.keys()))
+            
+            determined_task_type = endpoint_to_tasktype.get(default_endpoint, TaskType.ANALYTICS)
+            logging.info(f"Default task type: {determined_task_type.value} (from {default_endpoint})")
+            
+            # Create a scoring system for each endpoint
+            endpoint_scores = {endpoint: 0 for endpoint in all_configs.keys()}
+            logging.info("Initial scores: " + ", ".join([f"{ep}: {score}" for ep, score in endpoint_scores.items()]))
+            
+            # Parse the data
+            data_obj = None
+            if isinstance(data, str):
+                try:
+                    data_obj = json.loads(data)
+                except json.JSONDecodeError:
+                    logging.info("Could not parse data as JSON")
+            
+            if data_obj and isinstance(data_obj, dict):
+                dashboard_text = ""
+                score_explanations = {endpoint: [] for endpoint in all_configs.keys()}
+                
+                # Check if there's a question - gives higher score to general endpoint
+                if 'question' in data_obj and data_obj['question']:
+                    question_text = data_obj['question']
+                    logging.info(f"Question detected: '{question_text[:100]}...' if len > 100")
+                    
+                    # Give a very strong boost to the general endpoint for questions
+                    if "/general" in endpoint_scores:
+                        # Much stronger boost to ensure question handling
+                        endpoint_scores["/general"] += 100
+                        score_explanations["/general"].append("Question present (+100)")
+                        logging.info(f"Question detected, strongly boosting /general score (+100)")
+                    
+                    # Add the question to the dashboard text for keyword matching
+                    dashboard_text += question_text + " "
+                
+                # Add dashboard name to the text
+                if 'dashboardName' in data_obj:
+                    dashboard_name = data_obj.get('dashboardName', '').lower()
+                    dashboard_text += dashboard_name + " "
+                    logging.info(f"Dashboard name: {dashboard_name}")
+                    
+                # Add worksheet names to the text
+                worksheet_count = 0
+                if 'worksheets' in data_obj and isinstance(data_obj['worksheets'], list):
+                    worksheet_count = len(data_obj['worksheets'])
+                    worksheet_names = []
+                    
+                    for ws in data_obj['worksheets']:
+                        ws_name = ws.get('name', '').lower()
+                        worksheet_names.append(ws_name)
+                        dashboard_text += ws_name + " "
+                    
+                    logging.info(f"Worksheets ({worksheet_count}): {worksheet_names}")
+                    
+                    # Use number of worksheets as an indicator
+                    if worksheet_count <= 2:
+                        # For few worksheets, boost summarization score
+                        if "/summarization" in endpoint_scores:
+                            endpoint_scores["/summarization"] += 10
+                            score_explanations["/summarization"].append(f"Few worksheets ({worksheet_count}) (+10)")
+                            logging.info(f"Few worksheets ({worksheet_count}), boosting /summarization (+10)")
+                    else:
+                        # For many worksheets, boost analytics score
+                        if "/analytics" in endpoint_scores:
+                            endpoint_scores["/analytics"] += 10
+                            score_explanations["/analytics"].append(f"Many worksheets ({worksheet_count}) (+10)")
+                            logging.info(f"Many worksheets ({worksheet_count}), boosting /analytics (+10)")
+                
+                # Check for indicators in the dashboard text
+                for endpoint, settings in all_configs.items():
+                    matching_indicators = []
+                    for indicator in settings.indicators:
+                        if indicator.lower() in dashboard_text.lower():
+                            endpoint_scores[endpoint] += 5
+                            matching_indicators.append(indicator)
+                    
+                    if matching_indicators:
+                        score_explanations[endpoint].append(f"Matched indicators: {matching_indicators} (+{len(matching_indicators)*5})")
+                        logging.info(f"Endpoint {endpoint} matched indicators: {matching_indicators} (+{len(matching_indicators)*5})")
+                
+                # Add priority as a base score (inverted, since lower priority number = higher importance)
+                for endpoint, settings in all_configs.items():
+                    # Max priority is 1000, so we adjust the score inversely
+                    priority_score = max(0, (1000 - settings.priority) / 10)
+                    endpoint_scores[endpoint] += priority_score
+                    score_explanations[endpoint].append(f"Priority {settings.priority} (base: +{priority_score:.1f})")
+                    logging.info(f"Endpoint {endpoint} priority {settings.priority} adds base score: +{priority_score:.1f}")
+                
+                # Log the final scores and explanations
+                logging.info("=== ENDPOINT SCORING RESULTS ===")
+                for endpoint, score in sorted(endpoint_scores.items(), key=lambda x: x[1], reverse=True):
+                    explanation = "; ".join(score_explanations[endpoint])
+                    logging.info(f"{endpoint}: {score:.1f} points - {explanation}")
+                
+                # Select the highest scoring endpoint
+                if endpoint_scores:
+                    best_endpoint = max(endpoint_scores.items(), key=lambda x: x[1])[0]
+                    if best_endpoint in endpoint_to_tasktype:
+                        determined_task_type = endpoint_to_tasktype[best_endpoint]
+                        logging.info(f"Selected endpoint: {best_endpoint} with task type: {determined_task_type.value}")
+            else:
+                logging.info("No structured data to analyze for endpoint selection")
+            
+            # Set the determined task type
+            task_type = determined_task_type
+            logging.info(f"=== FINAL DECISION: Using task type: {task_type.value} ===")
+            
+        except Exception as e:
+            logging.error(f"Error auto-determining task type: {e}")
+            # Default to analytics if error occurs
+            task_type = TaskType.ANALYTICS
+            logging.info(f"Defaulting to {task_type.value} due to error")
+    
     # Route to the appropriate endpoint based on the task type
+    logging.info(f"Routing request to task type: {task_type.value}")
+    
     if task_type == TaskType.ANALYTICS:
-        return await analytics(AnalyticsRequest(**request_data))
+        logging.info("Calling analytics endpoint")
+        response = await analytics(AnalyticsRequest(**request_data))
+        logging.info(f"Analytics response: {response.get('response', '')[:100]}...")
+        # Add the selected endpoint to the response
+        response["selected_endpoint"] = "analytics"
+        return response
     elif task_type == TaskType.SUMMARIZATION:
-        return await summarization(SummarizationRequest(**request_data))
+        logging.info("Calling summarization endpoint")
+        response = await summarization(SummarizationRequest(**request_data))
+        logging.info(f"Summarization response: {response.get('response', '')[:100]}...")
+        # Add the selected endpoint to the response
+        response["selected_endpoint"] = "summarization"
+        return response
     elif task_type == TaskType.GENERAL:
-        return await general(GeneralRequest(**request_data))
+        logging.info("Calling general endpoint")
+        response = await general(GeneralRequest(**request_data))
+        logging.info(f"General response: {response.get('response', '')[:100]}...")
+        # Add the selected endpoint to the response
+        response["selected_endpoint"] = "general"
+        return response
     else:
+        logging.error(f"Unknown task type: {task_type}")
         return {"response": f"Unknown task type: {task_type}"}
 
 # Add a new endpoint that takes data, task type, and format type
@@ -482,9 +787,13 @@ async def route_endpoint(request: RouteRequest):
     Returns:
         The response from the routed endpoint
     """
-    # Check if we have a question
-    if request.question and request.task_type == TaskType.GENERAL:
-        # If we have a question and it's a general request, we need to handle it specially
+    # Log the incoming request for debugging
+    logging.info(f"Route endpoint request received - Task Type: {request.task_type}, Has Question: {bool(request.question)}")
+    
+    # Special handling for requests with questions
+    if request.question:
+        logging.info(f"Processing request with question: '{request.question[:50]}...' if len > 50")
+        
         try:
             # Parse the data as JSON if it's a string
             data_obj = request.data
@@ -493,6 +802,7 @@ async def route_endpoint(request: RouteRequest):
                     data_obj = json.loads(request.data)
                 except json.JSONDecodeError:
                     # Not valid JSON, use as is
+                    logging.warning("Question data is not valid JSON")
                     pass
             
             # Create a data structure with the question and data
@@ -504,8 +814,15 @@ async def route_endpoint(request: RouteRequest):
             # Convert to JSON string
             data_json = json.dumps(combined_data)
             
-            # Route the request with the combined data
-            return await route_request(data_json, request.task_type, request.format_type)
+            # For AUTO type or explicit GENERAL type, we handle questions
+            if request.task_type == TaskType.AUTO:
+                logging.info("Auto task type with question - setting task hint for GENERAL endpoint")
+                # Use the combined data but hint that this is a question for scoring
+                return await route_request(data_json, TaskType.AUTO, request.format_type)
+            else:
+                # Use the explicit task type (like GENERAL)
+                logging.info(f"Explicit task type {request.task_type} with question")
+                return await route_request(data_json, request.task_type, request.format_type)
             
         except Exception as e:
             logging.error(f"Error processing route request with question: {e}")
@@ -513,6 +830,7 @@ async def route_endpoint(request: RouteRequest):
             return await route_request(request.data, request.task_type, request.format_type)
     else:
         # Standard routing without question
+        logging.info(f"Standard routing without question, task type: {request.task_type}")
         return await route_request(request.data, request.task_type, request.format_type)
 
 # HTTPS Setup
