@@ -926,7 +926,9 @@ async def log_requests_middleware(request: FastAPIRequest, call_next):
             # Extract selected endpoint if available
             selected_endpoint = None
             if isinstance(response_json, dict) and "selected_endpoint" in response_json:
+                # Properly capture the selected endpoint from the route response
                 selected_endpoint = response_json.get("selected_endpoint")
+                logging.info(f"Detected routed endpoint: {selected_endpoint}")
             
             # Estimate token counts
             input_tokens = estimate_tokens(request_data)
@@ -983,6 +985,7 @@ async def monitor_ui(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     endpoint: Optional[str] = None,
+    selected_endpoint: Optional[str] = None,
     model: Optional[str] = None,
     status: Optional[str] = None
 ):
@@ -1009,6 +1012,7 @@ async def monitor_ui(
         start_date=start_date,
         end_date=end_date,
         endpoint=endpoint,
+        selected_endpoint=selected_endpoint,
         model=model,
         status=status
     )
@@ -1016,13 +1020,16 @@ async def monitor_ui(
     # Get statistics
     stats = get_stats()
     
-    # Get unique endpoints and models for filtering
+    # Get unique endpoints, selected_endpoints, and models for filtering
     endpoints = set()
+    selected_endpoints = set()
     models = set()
     
     for log in logs:
         if log["endpoint"]:
             endpoints.add(log["endpoint"])
+        if log["selected_endpoint"]:
+            selected_endpoints.add(log["selected_endpoint"])
         if log["model"]:
             models.add(log["model"])
     
@@ -1036,6 +1043,7 @@ async def monitor_ui(
             "limit": limit,
             "offset": offset,
             "endpoints": sorted(endpoints),
+            "selected_endpoints": sorted(selected_endpoints),
             "models": sorted(models)
         }
     )

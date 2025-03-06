@@ -124,6 +124,7 @@ def get_logs(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     endpoint: Optional[str] = None,
+    selected_endpoint: Optional[str] = None,
     model: Optional[str] = None,
     status: Optional[str] = None
 ) -> List[Dict[str, Any]]:
@@ -170,6 +171,10 @@ def get_logs(
     if endpoint:
         conditions.append("endpoint = ?")
         params.append(endpoint)
+    
+    if selected_endpoint:
+        conditions.append("selected_endpoint = ?")
+        params.append(selected_endpoint)
     
     if model:
         conditions.append("model = ?")
@@ -292,9 +297,13 @@ def get_stats() -> Dict[str, Any]:
     total_input_tokens = token_counts[0] or 0
     total_output_tokens = token_counts[1] or 0
     
-    # Get requests per endpoint
+    # Get requests per endpoint (including both entry point and selected endpoint)
     c.execute("SELECT endpoint, COUNT(*) FROM request_logs GROUP BY endpoint")
     requests_per_endpoint = {row[0]: row[1] for row in c.fetchall()}
+    
+    # Get requests per selected endpoint
+    c.execute("SELECT selected_endpoint, COUNT(*) FROM request_logs WHERE selected_endpoint IS NOT NULL GROUP BY selected_endpoint")
+    requests_per_selected_endpoint = {row[0]: row[1] for row in c.fetchall()}
     
     # Get requests per model
     c.execute("SELECT model, COUNT(*) FROM request_logs WHERE model IS NOT NULL GROUP BY model")
@@ -318,6 +327,7 @@ def get_stats() -> Dict[str, Any]:
         "total_input_tokens": total_input_tokens,
         "total_output_tokens": total_output_tokens,
         "requests_per_endpoint": requests_per_endpoint,
+        "requests_per_selected_endpoint": requests_per_selected_endpoint,
         "requests_per_model": requests_per_model,
         "requests_per_day": requests_per_day
     }

@@ -258,8 +258,14 @@
             <div id="requestsTab" class="tab-content active">
                 <div class="filters">
                     <select id="endpointFilter" onchange="applyFilters()">
-                        <option value="">All Endpoints</option>
+                        <option value="">All Entry Endpoints</option>
                         {% for endpoint in endpoints %}
+                            <option value="{{ endpoint }}">{{ endpoint }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="selectedEndpointFilter" onchange="applyFilters()">
+                        <option value="">All Final Endpoints</option>
+                        {% for endpoint in selected_endpoints %}
                             <option value="{{ endpoint }}">{{ endpoint }}</option>
                         {% endfor %}
                     </select>
@@ -283,10 +289,11 @@
                     <thead>
                         <tr>
                             <th>Time</th>
-                            <th>Endpoint</th>
+                            <th>Entry Endpoint</th>
+                            <th>Final Endpoint</th>
                             <th>Model</th>
                             <th>Status</th>
-                            <th>Execution Time</th>
+                            <th>Exec Time</th>
                             <th>Tokens (In/Out)</th>
                             <th>Actions</th>
                         </tr>
@@ -296,6 +303,13 @@
                         <tr>
                             <td>{{ log.timestamp }}</td>
                             <td>{{ log.endpoint }}</td>
+                            <td>
+                                {% if log.selected_endpoint %}
+                                <strong style="color: #2563eb">{{ log.selected_endpoint }}</strong>
+                                {% else %}
+                                <span style="color: #888">Same</span>
+                                {% endif %}
+                            </td>
                             <td>{{ log.model or "N/A" }}</td>
                             <td>
                                 {% if log.status == "success" %}
@@ -325,7 +339,8 @@
             <div id="endpointsTab" class="tab-content">
                 <div class="columns">
                     <div>
-                        <h3>Requests Per Endpoint</h3>
+                        <h3>Requests Per Entry Endpoint</h3>
+                        <p><small>The initial endpoint called by the client</small></p>
                         <table>
                             <thead>
                                 <tr>
@@ -344,10 +359,37 @@
                                 {% endfor %}
                             </tbody>
                         </table>
+
+                        <h3 style="margin-top: 30px;">Requests Per Final Endpoint</h3>
+                        <p><small>The actual endpoint that processed the request (after routing)</small></p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Selected Endpoint</th>
+                                    <th>Requests</th>
+                                    <th>Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for endpoint, count in stats.requests_per_selected_endpoint.items() %}
+                                <tr>
+                                    <td>{{ endpoint }}</td>
+                                    <td>{{ count }}</td>
+                                    <td>{{ "%.1f"|format((count / stats.total_requests * 100) if stats.total_requests > 0 else 0) }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                     <div>
+                        <h3>Endpoints Chart</h3>
                         <div class="chart-container">
-                            <canvas id="endpointsChart"></canvas>
+                            <canvas id="entryEndpointsChart"></canvas>
+                        </div>
+                        
+                        <h3 style="margin-top: 20px;">Final Endpoints Chart</h3>
+                        <div class="chart-container">
+                            <canvas id="selectedEndpointsChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -433,6 +475,7 @@
         // Filters
         function applyFilters() {
             const endpoint = document.getElementById('endpointFilter').value;
+            const selectedEndpoint = document.getElementById('selectedEndpointFilter').value;
             const model = document.getElementById('modelFilter').value;
             const status = document.getElementById('statusFilter').value;
             const startDate = document.getElementById('startDateFilter').value;
@@ -441,6 +484,7 @@
             let url = `/monitor?limit=${pageLimit}&offset=0`;
             
             if (endpoint) url += `&endpoint=${encodeURIComponent(endpoint)}`;
+            if (selectedEndpoint) url += `&selected_endpoint=${encodeURIComponent(selectedEndpoint)}`;
             if (model) url += `&model=${encodeURIComponent(model)}`;
             if (status) url += `&status=${encodeURIComponent(status)}`;
             if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
@@ -481,8 +525,8 @@
                         <table>
                             <tr><th>Request ID</th><td>${data.id}</td></tr>
                             <tr><th>Timestamp</th><td>${formattedTime}</td></tr>
-                            <tr><th>Endpoint</th><td>${data.endpoint}</td></tr>
-                            <tr><th>Selected Endpoint</th><td>${data.selected_endpoint || 'N/A'}</td></tr>
+                            <tr><th>Entry Endpoint</th><td>${data.endpoint}</td></tr>
+                            <tr><th>Final Endpoint</th><td><strong style="color: #2563eb">${data.selected_endpoint || 'N/A'}</strong></td></tr>
                             <tr><th>Status</th><td>${data.status}</td></tr>
                             <tr><th>Execution Time</th><td>${data.execution_time_ms || 'N/A'} ms</td></tr>
                             <tr><th>Model</th><td>${data.model || 'N/A'}</td></tr>
@@ -569,13 +613,13 @@
                 }
             });
             
-            // Endpoints chart
+            // Entry Endpoints chart
             const requestsPerEndpoint = {{ stats.requests_per_endpoint|tojson }};
             const endpointLabels = Object.keys(requestsPerEndpoint);
             const endpointCounts = Object.values(requestsPerEndpoint);
             
-            const endpointsCtx = document.getElementById('endpointsChart').getContext('2d');
-            new Chart(endpointsCtx, {
+            const entryEndpointsCtx = document.getElementById('entryEndpointsChart').getContext('2d');
+            new Chart(entryEndpointsCtx, {
                 type: 'pie',
                 data: {
                     labels: endpointLabels,
@@ -594,6 +638,46 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Entry Endpoints'
+                        }
+                    }
+                }
+            });
+            
+            // Selected Endpoints chart
+            const requestsPerSelectedEndpoint = {{ stats.requests_per_selected_endpoint|tojson }};
+            const selectedEndpointLabels = Object.keys(requestsPerSelectedEndpoint);
+            const selectedEndpointCounts = Object.values(requestsPerSelectedEndpoint);
+            
+            const selectedEndpointsCtx = document.getElementById('selectedEndpointsChart').getContext('2d');
+            new Chart(selectedEndpointsCtx, {
+                type: 'pie',
+                data: {
+                    labels: selectedEndpointLabels,
+                    datasets: [{
+                        data: selectedEndpointCounts,
+                        backgroundColor: [
+                            'rgba(49, 130, 206, 0.6)',
+                            'rgba(72, 187, 120, 0.6)',
+                            'rgba(237, 100, 166, 0.6)',
+                            'rgba(246, 173, 85, 0.6)',
+                            'rgba(113, 128, 150, 0.6)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Final (Selected) Endpoints'
+                        }
+                    }
                 }
             });
             
