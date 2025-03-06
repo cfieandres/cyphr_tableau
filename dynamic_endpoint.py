@@ -47,7 +47,7 @@ def format_response(response: str, format_type: FormatType = FormatType.AUTO) ->
     Returns:
         The formatted response
     """
-    from format_response import format_response as fr
+    from format_response import format_response as fr, optimize_data
     return fr(response, format_type=format_type)
 
 # Create a router for the dynamic endpoints
@@ -95,6 +95,19 @@ async def process_dynamic_endpoint(
     anonymized_data = request.data
     prompt = ""
     
+    # Process and optimize the data to reduce token usage
+    try:
+        # Try to parse the data as JSON
+        data_obj = json.loads(anonymized_data)
+        
+        # Use our optimize_data function to reduce tokens
+        logger.info("Optimizing data to reduce token usage")
+        formatted_data = optimize_data(data_obj)
+    except (json.JSONDecodeError, Exception) as e:
+        # Not valid JSON or optimization failed, use as is
+        logger.warning(f"Data optimization failed: {str(e)}")
+        formatted_data = anonymized_data
+    
     # Handle questions
     if request.question:
         logger.info(f"Processing question: {request.question[:100]}...")
@@ -103,125 +116,30 @@ async def process_dynamic_endpoint(
         if session_id:
             db.add_message(session_id, "user", request.question)
         
-        # Try to parse the data as JSON
-        try:
-            data_obj = json.loads(anonymized_data)
-            
-            # Format for dashboard data
-            if isinstance(data_obj, dict) and 'worksheets' in data_obj and isinstance(data_obj['worksheets'], list):
-                dashboard_name = data_obj.get('dashboardName', 'Dashboard')
-                formatted_data = f"# {dashboard_name}\n\n"
-                
-                for worksheet in data_obj['worksheets']:
-                    ws_name = worksheet.get('name', 'Unnamed Worksheet')
-                    ws_data = worksheet.get('data', {})
-                    
-                    # Format each worksheet section
-                    formatted_data += f"## {ws_name}\n"
-                    
-                    # Convert worksheet data to a readable format
-                    ws_data_str = json.dumps(ws_data, indent=2)
-                    formatted_data += f"```\n{ws_data_str}\n```\n\n"
-                
-                # Get conversation history if available
-                conversation_history = ""
-                if session_id:
-                    conversation_history = db.get_prompt_context(session_id)
-                
-                # Create prompt with the question, data, and history
-                if conversation_history:
-                    prompt = f"""Conversation history:
+        # Get conversation history if available
+        conversation_history = ""
+        if session_id:
+            conversation_history = db.get_prompt_context(session_id)
+        
+        # Create prompt with the question, data, and history
+        if conversation_history:
+            prompt = f"""Conversation history:
 {conversation_history}
 
 New question: {request.question}
 
-Dashboard Data:
+Data:
 {formatted_data}
 """
-                else:
-                    prompt = f"""Question: {request.question}
+        else:
+            prompt = f"""Question: {request.question}
 
-Dashboard Data:
+Data:
 {formatted_data}
-"""
-            else:
-                # Regular data format, convert to JSON string
-                data_str = json.dumps(data_obj, indent=2)
-                
-                # Get conversation history if available
-                conversation_history = ""
-                if session_id:
-                    conversation_history = db.get_prompt_context(session_id)
-                
-                # Create prompt with the question, data, and history
-                if conversation_history:
-                    prompt = f"""Conversation history:
-{conversation_history}
-
-New question: {request.question}
-
-Data:
-{data_str}
-"""
-                else:
-                    prompt = f"""Question: {request.question}
-
-Data:
-{data_str}
-"""
-        except json.JSONDecodeError:
-            # Not valid JSON, use as is
-            # Get conversation history if available
-            conversation_history = ""
-            if session_id:
-                conversation_history = db.get_prompt_context(session_id)
-            
-            # Create prompt with the question, data, and history
-            if conversation_history:
-                prompt = f"""Conversation history:
-{conversation_history}
-
-New question: {request.question}
-
-Data:
-{anonymized_data}
-"""
-            else:
-                prompt = f"""Question: {request.question}
-
-Data:
-{anonymized_data}
 """
     else:
-        # No question, just parse the data
-        try:
-            # Try to parse as JSON
-            data_obj = json.loads(anonymized_data)
-            
-            # Format for dashboard data
-            if isinstance(data_obj, dict) and 'worksheets' in data_obj and isinstance(data_obj['worksheets'], list):
-                dashboard_name = data_obj.get('dashboardName', 'Dashboard')
-                formatted_data = f"# {dashboard_name}\n\n"
-                
-                for worksheet in data_obj['worksheets']:
-                    ws_name = worksheet.get('name', 'Unnamed Worksheet')
-                    ws_data = worksheet.get('data', {})
-                    
-                    # Format each worksheet section
-                    formatted_data += f"## {ws_name}\n"
-                    
-                    # Convert worksheet data to a readable format
-                    ws_data_str = json.dumps(ws_data, indent=2)
-                    formatted_data += f"```\n{ws_data_str}\n```\n\n"
-                
-                # Use formatted data as prompt
-                prompt = formatted_data
-            else:
-                # Use the original JSON string
-                prompt = anonymized_data
-        except json.JSONDecodeError:
-            # Not valid JSON, use as is
-            prompt = anonymized_data
+        # No question, just use the formatted data as the prompt
+        prompt = formatted_data
     
     # Process with Claude using endpoint-specific configuration
     logger.info(f"Processing with Claude using endpoint: {endpoint_path}")
