@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import '../styles/ChatDisplay.css';
 
 /**
@@ -13,39 +15,52 @@ import '../styles/ChatDisplay.css';
 const ChatDisplay = ({ response, loading, onAskQuestion }) => {
   const [question, setQuestion] = useState('');
   
-  // Format the response text to handle different content types
+  // Format the response text using markdown parsing
   const formatResponse = (text) => {
     if (!text) return null;
     
-    // Check if response contains list items (starting with - or *)
-    const containsList = /^[-*]\s.+/gm.test(text);
-    
-    // If the response contains a list, preserve formatting
-    if (containsList) {
-      return (
-        <div className="formatted-response">
-          {text.split('\n').map((line, i) => {
-            // Check if line is a list item
-            if (line.match(/^[-*]\s.+/)) {
-              return (
-                <div key={i} className="list-item">
-                  {line}
-                </div>
-              );
-            }
-            // Otherwise, it's a regular paragraph
-            return <p key={i}>{line}</p>;
-          })}
-        </div>
-      );
-    }
-    
-    // For regular text, just preserve line breaks
     return (
       <div className="formatted-response">
-        {text.split('\n').map((line, i) => (
-          <p key={i}>{line}</p>
-        ))}
+        <ReactMarkdown 
+          remarkPlugins={[remarkGfm]}
+          components={{
+            // Style code blocks appropriately
+            code({node, inline, className, children, ...props}) {
+              const match = /language-(\w+)/.exec(className || '');
+              return !inline ? (
+                <pre className="code-block">
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
+                </pre>
+              ) : (
+                <code className="inline-code" {...props}>
+                  {children}
+                </code>
+              );
+            },
+            
+            // Style tables properly
+            table({node, children, ...props}) {
+              return (
+                <div className="table-container">
+                  <table {...props}>{children}</table>
+                </div>
+              );
+            },
+            
+            // Make links open in a new tab
+            a({node, href, children, ...props}) {
+              return (
+                <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                  {children}
+                </a>
+              );
+            }
+          }}
+        >
+          {text}
+        </ReactMarkdown>
       </div>
     );
   };

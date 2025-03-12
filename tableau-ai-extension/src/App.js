@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import ChatDisplay from './components/ChatDisplay';
 import { getWorksheetData, getAllWorksheets } from './utils/tableauUtils';
 import { processData, checkApiHealth, getApiEndpoints } from './utils/apiUtils';
+import './styles/ChatDisplay.css';
 import './App.css';
 
 /**
- * Main application component for the cyphr Tableau Extension
+ * Main application component for the claire Tableau Extension
  * Manages API calls, data processing, and UI state
  */
 function App() {
@@ -328,7 +329,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>cyphr</h1>
+        <h1>claire</h1>
         <div className="subtitle">AI-powered insights for Tableau</div>
         {username && <div className="username">Hi, {username} 👋</div>}
       </header>
