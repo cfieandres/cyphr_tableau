@@ -23,6 +23,9 @@ function App() {
   const [selectedEndpoint, setSelectedEndpoint] = useState(null);
   const [lastQuestion, setLastQuestion] = useState('');
   
+  // Conversation history state
+  const [conversationHistory, setConversationHistory] = useState([]);
+  
   // Session state for maintaining conversation history
   const [sessionId, setSessionId] = useState(null);
 
@@ -36,6 +39,13 @@ function App() {
       createSession();
     }
   }, []);
+  
+  // Load conversation history when sessionId changes
+  useEffect(() => {
+    if (sessionId) {
+      loadSessionConversation(sessionId);
+    }
+  }, [sessionId]);
 
   // Enable question input by default
   useEffect(() => {
@@ -220,11 +230,47 @@ function App() {
         const data = await response.json();
         setSessionId(data.session_id);
         console.log(`Created new conversation session: ${data.session_id}`);
+        
+        // Clear conversation history for the new session
+        setConversationHistory([]);
       } else {
         console.error('Failed to create session');
       }
     } catch (error) {
       console.error('Error creating session:', error);
+    }
+  };
+  
+  /**
+   * Load conversation history for a session
+   * @param {string} sessionId - The session ID to load history for
+   */
+  const loadSessionConversation = async (sessionId) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000'}/sessions/${sessionId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`Loaded session with ${data.message_count} messages`);
+        
+        // Convert the message format for our UI
+        const messages = data.messages.map(msg => ({
+          id: new Date(msg.timestamp).getTime().toString(),
+          content: msg.content,
+          sender: msg.role === 'user' ? 'user' : 'assistant',
+          timestamp: new Date(msg.timestamp)
+        }));
+        
+        setConversationHistory(messages);
+      } else if (response.status === 404) {
+        // Session not found, create a new one
+        console.log('Session not found, creating new session');
+        await createSession();
+      } else {
+        console.error('Failed to load session messages');
+      }
+    } catch (error) {
+      console.error('Error loading session messages:', error);
     }
   };
 
@@ -233,17 +279,18 @@ function App() {
    * @param {string} taskType - Type of task (analyze, summarize, general)
    * @param {Object} data - Data to process
    * @param {string} [question] - Optional question for 'general' task type
+   * @returns {Object} - The API response
    */
   const processDataWithAI = async (taskType, data, question = null) => {
     if (!data) {
       setError('No data available to process');
-      return;
+      return null;
     }
     
     if (!apiConnected) {
       await checkApiConnection();
       if (!apiConnected) {
-        return;
+        return null;
       }
     }
     
@@ -275,9 +322,12 @@ function App() {
         setSessionId(result.session_id);
         console.log(`Updated session ID: ${result.session_id}`);
       }
+      
+      return result;
     } catch (error) {
       console.error('Error processing data with AI:', error);
       setError(`Failed to process data: ${error.message}`);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -291,7 +341,30 @@ function App() {
     const data = await fetchTableauData();
     if (data) {
       // Let the backend determine the task type based on dashboard data
-      await processDataWithAI('auto', data);
+      const result = await processDataWithAI('auto', data);
+      
+      if (result && result.response) {
+        // Add the system-generated response to conversation history
+        const newMessage = {
+          id: Date.now().toString(),
+          content: result.response,
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        
+        // If this is the first message (initial insights), create a synthetic system message
+        if (conversationHistory.length === 0) {
+          const systemPrompt = {
+            id: (Date.now() - 1).toString(),
+            content: 'Get insights from this dashboard',
+            sender: 'system',
+            timestamp: new Date()
+          };
+          setConversationHistory(prev => [...prev, systemPrompt, newMessage]);
+        } else {
+          setConversationHistory(prev => [...prev, newMessage]);
+        }
+      }
     }
   };
 
@@ -315,12 +388,34 @@ function App() {
     // Clear any previous errors and set loading state
     setError(null);
     
+    // Add user question to conversation history immediately
+    const userMessage = {
+      id: Date.now().toString(),
+      content: question,
+      sender: 'user',
+      timestamp: new Date()
+    };
+    
+    setConversationHistory(prev => [...prev, userMessage]);
+    
     // Get data if needed
     const data = tableauData || await fetchTableauData();
     if (data) {
       // Pass question but let backend determine task type
       // The 'auto' task type should trigger question handling on the backend
-      await processDataWithAI('auto', data, question);
+      const result = await processDataWithAI('auto', data, question);
+      
+      if (result && result.response) {
+        // Add the assistant's response to conversation history
+        const assistantMessage = {
+          id: (Date.now() + 100).toString(), // Ensure unique ID
+          content: result.response,
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        
+        setConversationHistory(prev => [...prev, assistantMessage]);
+      }
     } else {
       setError('Unable to fetch data to answer your question');
     }
@@ -361,6 +456,7 @@ function App() {
           response={response} 
           loading={loading}
           onAskQuestion={handleAskQuestion}
+          conversationHistory={conversationHistory}
         />
       </main>
       

@@ -8,6 +8,27 @@
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 
 /**
+ * Fetch conversation history for a specific session
+ * @param {string} sessionId - The session ID to fetch messages for
+ * @returns {Promise<Array>} - Array of message objects
+ */
+export const fetchSessionMessages = async (sessionId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/messages`);
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.messages || [];
+  } catch (error) {
+    console.error('Error fetching session messages:', error);
+    return [];
+  }
+};
+
+/**
  * Process data through the routing endpoint
  * @param {string} taskType - Type of analysis to perform (analyze, summarize, general)
  * @param {Object} data - Data to be processed
