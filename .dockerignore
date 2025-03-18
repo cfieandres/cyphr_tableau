@@ -1,0 +1,69 @@
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker/
+
+# Node.js (Frontend)
+tableau-ai-extension/node_modules
+tableau-ai-extension/.pnp
+tableau-ai-extension/.pnp.js
+tableau-ai-extension/coverage
+tableau-ai-extension/build
+tableau-ai-extension/.DS_Store
+tableau-ai-extension/.env.local
+tableau-ai-extension/.env.development.local
+tableau-ai-extension/.env.test.local
+tableau-ai-extension/.env.production.local
+tableau-ai-extension/npm-debug.log*
+tableau-ai-extension/yarn-debug.log*
+tableau-ai-extension/yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Database files (to avoid copying, we'll use volumes instead)
+database/*.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Documentation
+README.md
+DOCKER_README.md
+
+# Misc
+.DS_Store
+.env
+.env.*
+!.env.sample
+img_*.png
+"need to remove.png"
