@@ -1,0 +1,44 @@
+spec:
+  containers:
+    - name: claire
+      image: snowpark_container_aiserv:latest
+      env:
+        SERVER_PORT: "8080"
+      readinessProbe:
+        port: 8080
+        path: /health
+      resources:
+        requests:
+          memory: 2G
+          cpu: 1
+        limits:
+          memory: 4G
+          cpu: 2
+  endpoints:
+    - name: api-endpoint
+      port: 8080
+      public: true
+      protocol: HTTP
+      corsSettings:
+        Access-Control-Allow-Origin:
+          - "*" # Allow all origins
+        Access-Control-Allow-Methods:
+          - "GET"
+          - "POST"
+          - "OPTIONS"
+        Access-Control-Allow-Headers:
+          - "Content-Type"
+          - "Authorization"
+  logExporters:
+    eventTableConfig:
+      logLevel: INFO
+  platformMonitor:
+    metricConfig:
+      groups:
+        - CONTAINER_CPU
+        - CONTAINER_MEMORY
+
+serviceRoles:
+  - name: default_service_role
+    endpoints:
+      - api-endpoint
