@@ -27,7 +27,7 @@ DEFAULT_CONNECTION_PARAMS = {
 }
 
 class SnowflakeLLMProcessor:
-    """Handles communication with Claude via Snowflake Cortex AI functions."""
+    """Handles communication with AI models via Snowflake Cortex AI functions."""
     
     def __init__(self, connection_params: Optional[Dict[str, str]] = None):
         """
@@ -120,7 +120,7 @@ class SnowflakeLLMProcessor:
     
     def preprocess_text(self, text: str) -> str:
         """
-        Preprocess text before sending to Claude.
+        Preprocess text before sending to the AI model.
         
         Args:
             text: The text to preprocess
@@ -149,10 +149,10 @@ class SnowflakeLLMProcessor:
         **kwargs  # Add **kwargs to catch any other arguments
     ) -> str:
         """
-        Process a query using Claude via Snowflake Cortex.
+        Process a query using an AI model via Snowflake Cortex.
         
         Args:
-            prompt: The prompt text to send to Claude
+            prompt: The prompt text to send to the model
             temperature: The temperature parameter for the model (default: 0.7)
             endpoint: The endpoint being used (for config lookup)
             agent_config: Optional agent configuration manager (legacy)
@@ -161,7 +161,7 @@ class SnowflakeLLMProcessor:
             instructions: Direct instructions to use (overrides config lookup)
             
         Returns:
-            The response from Claude
+            The response from the AI model
         """
         # Set module name for proper logging identification
         logger_name = __name__
@@ -278,7 +278,7 @@ class SnowflakeLLMProcessor:
             
             if not result_df:
                 logger.error("Cortex processing returned no result")
-                return "No response from Claude"
+                return "No response from AI model"
             
             result = result_df[0]['PROCESSED_RESULT']
             logger.info("Successfully processed data with Cortex")

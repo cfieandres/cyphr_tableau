@@ -306,8 +306,12 @@ def get_stats() -> Dict[str, Any]:
     requests_per_selected_endpoint = {row[0]: row[1] for row in c.fetchall()}
     
     # Get requests per model
-    c.execute("SELECT model, COUNT(*) FROM request_logs WHERE model IS NOT NULL GROUP BY model")
+    c.execute("SELECT model, COUNT(*) FROM request_logs WHERE model IS NOT NULL AND model != '' GROUP BY model")
     requests_per_model = {row[0]: row[1] for row in c.fetchall()}
+    
+    # Log found models for debugging
+    import logging
+    logging.info(f"Models found in database: {list(requests_per_model.keys())}")
     
     # Get requests per day for the last 30 days
     c.execute('''

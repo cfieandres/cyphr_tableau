@@ -219,8 +219,8 @@ class Database:
             description: Description of what the endpoint does
             indicators: List of keywords that suggest this endpoint should be used
             priority: Priority order (lower numbers have higher priority)
-            model: The model to use
-            temperature: The temperature parameter
+            model: The AI model to use (any model supported by Snowflake Cortex)
+            temperature: The temperature parameter (0.0-1.0, controls randomness)
             
         Returns:
             The updated endpoint configuration

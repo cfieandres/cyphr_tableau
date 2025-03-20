@@ -5,7 +5,7 @@ Test script to verify the Snowflake Cortex connection.
 
 import logging
 import sys
-from process_with_claude import SnowflakeLLMProcessor
+from snowflake_llm_processor import SnowflakeLLMProcessor
 from dotenv import load_dotenv
 import os
 import json

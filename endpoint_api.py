@@ -20,7 +20,7 @@ class EndpointCreate(BaseModel):
     description: str = ""
     indicators: List[str] = []
     priority: int = 100
-    model: str = "claude-3-5-sonnet"
+    model: str = "claude-3-5-sonnet"  # Default model, can be any supported by Snowflake Cortex
     temperature: float = 0.7
 
 # Create router

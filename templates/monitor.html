@@ -409,13 +409,21 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for model, count in stats.requests_per_model.items() %}
-                                <tr>
-                                    <td>{{ model }}</td>
-                                    <td>{{ count }}</td>
-                                    <td>{{ "%.1f"|format((count / stats.total_requests * 100) if stats.total_requests > 0 else 0) }}%</td>
-                                </tr>
-                                {% endfor %}
+                                {% if stats.requests_per_model %}
+                                    {% for model, count in stats.requests_per_model.items() %}
+                                    <tr>
+                                        <td>{{ model }}</td>
+                                        <td>{{ count }}</td>
+                                        <td>{{ "%.1f"|format((count / stats.total_requests * 100) if stats.total_requests > 0 else 0) }}%</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="3" style="text-align: center; padding: 20px;">
+                                            <em>No model usage data available yet. Process requests with models to see usage statistics.</em>
+                                        </td>
+                                    </tr>
+                                {% endif %}
                             </tbody>
                         </table>
                     </div>
@@ -687,27 +695,43 @@
             const modelCounts = Object.values(requestsPerModel);
             
             const modelsCtx = document.getElementById('modelsChart').getContext('2d');
-            new Chart(modelsCtx, {
-                type: 'pie',
-                data: {
-                    labels: modelLabels,
-                    datasets: [{
-                        data: modelCounts,
-                        backgroundColor: [
-                            'rgba(49, 151, 149, 0.6)',
-                            'rgba(217, 70, 239, 0.6)',
-                            'rgba(234, 179, 8, 0.6)',
-                            'rgba(79, 70, 229, 0.6)',
-                            'rgba(220, 38, 38, 0.6)'
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                }
-            });
+            
+            if (modelLabels.length > 0) {
+                new Chart(modelsCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: modelLabels,
+                        datasets: [{
+                            data: modelCounts,
+                            backgroundColor: [
+                                'rgba(49, 151, 149, 0.6)',
+                                'rgba(217, 70, 239, 0.6)',
+                                'rgba(234, 179, 8, 0.6)',
+                                'rgba(79, 70, 229, 0.6)',
+                                'rgba(220, 38, 38, 0.6)',
+                                'rgba(16, 185, 129, 0.6)',
+                                'rgba(245, 158, 11, 0.6)',
+                                'rgba(99, 102, 241, 0.6)',
+                                'rgba(236, 72, 153, 0.6)',
+                                'rgba(124, 58, 237, 0.6)',
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                    }
+                });
+            } else {
+                // Display a message when no data is available
+                modelsCtx.canvas.style.height = '150px';
+                modelsCtx.font = '14px Arial';
+                modelsCtx.fillStyle = '#718096';
+                modelsCtx.textAlign = 'center';
+                modelsCtx.textBaseline = 'middle';
+                modelsCtx.fillText('No model usage data available yet.', modelsCtx.canvas.width / 2, modelsCtx.canvas.height / 2);
+            }
         });
     </script>
 </body>

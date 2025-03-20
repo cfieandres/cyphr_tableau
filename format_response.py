@@ -2,11 +2,15 @@
 Response formatting module for the cyphr AI Extension.
 
 This module provides functions for formatting Claude's responses
-for display in the Tableau extension.
+for display in the Tableau extension and optimizing data to reduce token usage.
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Union
 import re
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def format_response(response: str, format_type: Optional[str] = "auto") -> str:
@@ -155,6 +159,200 @@ def format_as_json(response: str) -> str:
         return response
 
 
+def optimize_data(data: Union[str, Dict[str, Any], List[Any]]) -> str:
+    """
+    Optimize data to reduce token count for LLM processing.
+    
+    Implements several optimization strategies:
+    1. Abbreviate repetitive strings in measure names
+    2. Use compact data formats (CSV-style for simple data)
+    3. Round numerical precision
+    4. Compress descriptive names with abbreviations
+    
+    Args:
+        data: The data to optimize, either as a string or parsed JSON object
+        
+    Returns:
+        Optimized data as a string
+    """
+    # If data is a string, try to parse it as JSON
+    if isinstance(data, str):
+        try:
+            parsed_data = json.loads(data)
+            return optimize_data(parsed_data)
+        except json.JSONDecodeError:
+            # If it's not JSON, return as is
+            return data
+    
+    # If it's a dashboard with worksheets
+    if isinstance(data, dict) and 'worksheets' in data and isinstance(data['worksheets'], list):
+        dashboard_name = data.get('dashboardName', 'Dashboard')
+        formatted_data = f"# {dashboard_name}\n\n"
+        
+        for worksheet in data['worksheets']:
+            ws_name = worksheet.get('name', 'Unnamed Worksheet')
+            ws_data = worksheet.get('data', {})
+            
+            formatted_data += f"## {ws_name}\n"
+            
+            # Add processing notes
+            formatted_data += "\n**Processing Notes:**\n"
+            formatted_data += "- Data has been optimized to reduce token usage\n"
+            formatted_data += "- Measure names have been abbreviated\n"
+            formatted_data += "- Numerical values have been rounded for efficiency\n\n"
+            
+            # Apply optimizations to worksheet data
+            if isinstance(ws_data, dict):
+                # Extract column name mappings and constant values
+                column_mappings = {}
+                constant_values = {}
+                
+                # If there are rows, process them
+                if 'rows' in ws_data and isinstance(ws_data['rows'], list):
+                    rows = ws_data['rows']
+                    
+                    # Extract column mappings and abbreviate
+                    if rows and isinstance(rows[0], dict):
+                        # Find columns with common prefixes/identifiers to abbreviate
+                        measure_name_prefixes = {}
+                        for row in rows:
+                            for key, value in row.items():
+                                if key == "Measure Names" and isinstance(value, str):
+                                    # Extract federated ID prefixes
+                                    match = re.search(r'\[federated\.([^]]+)]', value)
+                                    if match:
+                                        prefix = match.group(0)
+                                        if prefix not in measure_name_prefixes:
+                                            measure_name_prefixes[prefix] = f"F{len(measure_name_prefixes) + 1}"
+                    
+                    # Process constant values across all rows
+                    if rows and len(rows) > 0:
+                        # Find values that are constant across all rows
+                        sample_row = rows[0]
+                        for key, value in sample_row.items():
+                            if key != "Measure Names" and key != "Measure Values" and key != "Date Selector Axis":
+                                is_constant = True
+                                constant_value = value
+                                
+                                for row in rows[1:]:
+                                    if key not in row or row[key] != constant_value:
+                                        is_constant = False
+                                        break
+                                
+                                if is_constant:
+                                    constant_values[key] = constant_value
+                    
+                    # Optimize the rows data
+                    optimized_rows = []
+                    for row in rows:
+                        optimized_row = {}
+                        
+                        for key, value in row.items():
+                            # Skip constant values
+                            if key in constant_values:
+                                continue
+                            
+                            if key == "Measure Names" and isinstance(value, str):
+                                # Abbreviate measure names
+                                abbreviated = value
+                                for prefix, abbr in measure_name_prefixes.items():
+                                    abbreviated = abbreviated.replace(prefix, abbr)
+                                # Remove long IDs
+                                abbreviated = re.sub(r'_\d{15,}', '_ID', abbreviated)
+                                optimized_row[key] = abbreviated
+                            elif key == "Measure Values" and isinstance(value, (int, float)):
+                                # Round numerical values
+                                if abs(value) < 0.001 or abs(value) > 1000000:
+                                    # Use scientific notation for very small or large numbers
+                                    optimized_row[key] = f"{value:.2e}"
+                                elif abs(value) < 0.1:
+                                    # Keep 4 decimal places for small numbers
+                                    optimized_row[key] = round(value, 4)
+                                elif abs(value) < 1:
+                                    # Keep 3 decimal places for medium small numbers
+                                    optimized_row[key] = round(value, 3)
+                                elif abs(value) < 10:
+                                    # Keep 2 decimal places for medium numbers
+                                    optimized_row[key] = round(value, 2)
+                                else:
+                                    # Round to nearest integer for larger numbers
+                                    optimized_row[key] = round(value)
+                            else:
+                                optimized_row[key] = value
+                        
+                        optimized_rows.append(optimized_row)
+                    
+                    # Determine if CSV format would be more efficient
+                    use_csv_format = len(optimized_rows) > 5 and all(
+                        len(row) <= 3 for row in optimized_rows
+                    )
+                    
+                    # Output column mappings if we abbreviated
+                    if measure_name_prefixes:
+                        formatted_data += "\n**Abbreviated Column Prefixes:**\n"
+                        for prefix, abbr in measure_name_prefixes.items():
+                            formatted_data += f"- `{abbr}`: {prefix}\n"
+                    
+                    # Output constant values
+                    if constant_values:
+                        formatted_data += "\n**Constant Values (apply to all rows):**\n"
+                        for key, value in constant_values.items():
+                            formatted_data += f"- `{key}`: {value}\n"
+                    
+                    formatted_data += f"\n*Dataset sampled: showing {len(optimized_rows)} rows. *\n\n"
+                    
+                    # Use CSV format for better token efficiency if appropriate
+                    if use_csv_format and optimized_rows:
+                        # Get the headers
+                        headers = list(optimized_rows[0].keys())
+                        
+                        # Create CSV header
+                        csv_data = ",".join([f'"{h}"' for h in headers]) + "\n"
+                        
+                        # Add rows
+                        for row in optimized_rows:
+                            row_values = []
+                            for header in headers:
+                                val = row.get(header, "")
+                                if isinstance(val, str):
+                                    val = f'"{val}"'
+                                else:
+                                    val = str(val)
+                                row_values.append(val)
+                            csv_data += ",".join(row_values) + "\n"
+                        
+                        formatted_data += f"```csv\n{csv_data}```\n\n"
+                    else:
+                        # Use compact JSON for fewer tokens
+                        compacted_rows = json.dumps({"rows": optimized_rows}, separators=(',', ':'))
+                        formatted_data += f"```json\n{compacted_rows}\n```\n\n"
+                else:
+                    # No rows, just output the data in compact format
+                    compacted_data = json.dumps(ws_data, separators=(',', ':'))
+                    formatted_data += f"```json\n{compacted_data}\n```\n\n"
+            else:
+                # Not a dict, just output as is
+                formatted_data += f"```\n{json.dumps(ws_data, separators=(',', ':'))}\n```\n\n"
+        
+        return formatted_data
+    
+    # For regular data (not dashboard format)
+    elif isinstance(data, dict):
+        # Compact JSON with minimal whitespace
+        return json.dumps(data, separators=(',', ':'))
+    
+    elif isinstance(data, list):
+        # If it's a simple list of primitive values
+        if all(isinstance(item, (str, int, float, bool)) for item in data):
+            return str(data)
+        
+        # Compact JSON for complex lists
+        return json.dumps(data, separators=(',', ':'))
+    
+    # Default case
+    return str(data)
+
+
 # Example usage
 if __name__ == "__main__":
     # Sample response
@@ -179,3 +377,30 @@ if __name__ == "__main__":
     print(sample_response)
     print("\nFormatted as bullet points:")
     print(bullet_format)
+    
+    # Sample data optimization
+    sample_data = {
+        "worksheets": [
+            {
+                "name": "Sample Sheet",
+                "data": {
+                    "rows": [
+                        {
+                            "Measure Names": "[federated.0h4dzlz0y0okrc17lta4p18c1we8].[usr:F2F index YOY (copy)_1736982137076514834:qk]",
+                            "Date Selector Axis": "Nov-24",
+                            "Measure Values": 0.06761604004140297
+                        },
+                        {
+                            "Measure Names": "[federated.0h4dzlz0y0okrc17lta4p18c1we8].[usr:Calculation_490892366328508426:qk]",
+                            "Date Selector Axis": "Nov-24",
+                            "Measure Values": 0.6137627999541156
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    
+    optimized = optimize_data(sample_data)
+    print("\nOptimized data:")
+    print(optimized)

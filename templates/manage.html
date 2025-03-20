@@ -203,15 +203,56 @@
                 <div class="form-group">
                     <label for="model">Model:</label>
                     <select id="model" name="model">
-                        <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (18K tokens)</option>
-                        <option value="mistral-large">Mistral Large (32K tokens)</option>
-                        <option value="mistral-large2">Mistral Large 2 (128K tokens)</option>
-                        <option value="reka-flash">Reka Flash (100K tokens)</option>
-                        <option value="deepseek-r1">DeepSeek R1 (32K tokens)</option>
-                        <option value="snowflake-arctic">Snowflake Arctic (4K tokens)</option>
+                        <optgroup label="Claude (Anthropic)">
+                            <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (18K tokens)</option>
+                            <option value="claude-3-5-haiku">Claude 3.5 Haiku (8K tokens)</option>
+                            <option value="claude-3-opus">Claude 3 Opus (180K tokens)</option>
+                            <option value="claude-3-sonnet">Claude 3 Sonnet (100K tokens)</option>
+                            <option value="claude-3-haiku">Claude 3 Haiku (16K tokens)</option>
+                        </optgroup>
+                        <optgroup label="Gemma (Google)">
+                            <option value="gemma-7b">Gemma 7B (8K tokens)</option>
+                        </optgroup>
+                        <optgroup label="Jamba (Anthropic)">
+                            <option value="jamba-1.5-mini">Jamba 1.5 Mini (8K tokens)</option>
+                            <option value="jamba-1.5-large">Jamba 1.5 Large (32K tokens)</option>
+                            <option value="jamba-instruct">Jamba Instruct (16K tokens)</option>
+                        </optgroup>
+                        <optgroup label="Llama (Meta)">
+                            <option value="llama2-70b-chat">Llama 2 70B Chat (4K tokens)</option>
+                            <option value="llama3-8b">Llama 3 8B (8K tokens)</option>
+                            <option value="llama3-70b">Llama 3 70B (8K tokens)</option>
+                            <option value="llama3.1-8b">Llama 3.1 8B (8K tokens)</option>
+                            <option value="llama3.1-70b">Llama 3.1 70B (8K tokens)</option>
+                            <option value="llama3.1-405b">Llama 3.1 405B (128K tokens)</option>
+                            <option value="llama3.2-1b">Llama 3.2 1B (4K tokens)</option>
+                            <option value="llama3.2-3b">Llama 3.2 3B (8K tokens)</option>
+                            <option value="llama3.3-70b">Llama 3.3 70B (32K tokens)</option>
+                        </optgroup>
+                        <optgroup label="Mistral">
+                            <option value="mistral-large">Mistral Large (32K tokens)</option>
+                            <option value="mistral-large2">Mistral Large 2 (128K tokens)</option>
+                            <option value="mistral-7b">Mistral 7B (8K tokens)</option>
+                        </optgroup>
+                        <optgroup label="Mixtral">
+                            <option value="mixtral-8x7b">Mixtral 8x7B (32K tokens)</option>
+                        </optgroup>
+                        <optgroup label="Reka">
+                            <option value="reka-core">Reka Core (128K tokens)</option>
+                            <option value="reka-flash">Reka Flash (100K tokens)</option>
+                        </optgroup>
+                        <optgroup label="Snowflake">
+                            <option value="snowflake-arctic">Snowflake Arctic (4K tokens)</option>
+                            <option value="snowflake-llama-3.1-405b">Snowflake Llama 3.1 405B (128K tokens)</option>
+                            <option value="snowflake-llama-3.3-70b">Snowflake Llama 3.3 70B (32K tokens)</option>
+                        </optgroup>
+                        <optgroup label="Other">
+                            <option value="deepseek-r1">DeepSeek R1 (32K tokens)</option>
+                        </optgroup>
                     </select>
                     <small style="display: block; margin-top: 5px; color: #666;">
-                        All models have 8,192 max output tokens. Choose based on your input size requirements.
+                        All models have different context sizes as indicated. Choose based on your input requirements.
+                        Note that the actual max output tokens may vary by model.
                     </small>
                 </div>
                 
