@@ -1,5 +1,6 @@
 import snowflake.connector
 from snowflake.snowpark import Session
+from snowflake.snowpark.context import get_active_session
 import os
 import logging
 import json
@@ -33,9 +34,14 @@ class SnowflakeLLMProcessor:
         """
         Initialize the Snowflake connection.
         
+        This class uses a dual connection approach:
+        1. When running inside Snowflake (Snowpark container), it tries to get the active session
+        2. If that fails (e.g., when running locally), it falls back to using connection parameters
+        
         Args:
             connection_params: Dictionary with Snowflake connection parameters.
-                              If None, uses environment variables.
+                              If None, uses environment variables from DEFAULT_CONNECTION_PARAMS.
+                              Only used if get_active_session() fails.
         """
         self.connection_params = connection_params or DEFAULT_CONNECTION_PARAMS
         self.session = None
@@ -43,10 +49,20 @@ class SnowflakeLLMProcessor:
     def connect(self):
         """Create a connection to Snowflake if not already connected."""
         if not self.session:
-            logger.info("Creating new Snowpark session")
+            logger.info("Attempting to get active Snowpark session")
             
-            # Create a Snowpark session - this is the only connection we'll use
-            self.session = Session.builder.configs(self.connection_params).create()
+            try:
+                # First try to get active session (when running inside Snowflake)
+                self.session = get_active_session()
+                logger.info("Successfully retrieved active Snowpark session")
+            except Exception as e:
+                # If get_active_session fails, fall back to creating a new session
+                logger.info(f"Failed to get active session: {str(e)}")
+                logger.info("Falling back to creating new Snowpark session with credentials")
+                
+                # Create a Snowpark session using connection parameters
+                self.session = Session.builder.configs(self.connection_params).create()
+                logger.info("Successfully created new Snowpark session with credentials")
             
             # Set all context parameters explicitly to ensure they're active
             try:

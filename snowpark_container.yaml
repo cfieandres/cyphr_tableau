@@ -5,7 +5,7 @@ spec:
       env:
         SERVER_PORT: "8080"
       readinessProbe:
-        port: 8080
+        port: 80
         path: /health
       resources:
         requests:
@@ -16,7 +16,7 @@ spec:
           cpu: 2
   endpoints:
     - name: api-endpoint
-      port: 8080
+      port: 80
       public: true
       protocol: HTTP
       corsSettings:
