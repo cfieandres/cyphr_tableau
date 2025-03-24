@@ -3,11 +3,11 @@
     <dashboard-extension id="com.cyphr.tableau-ai-extension" extension-version="1.0.0">
       <default-locale>en_US</default-locale>
       <name resource-id="name">cyphr AI Extension</name>
-      <description>AI-Driven Tableau Embedded Application powered by cyphr</description>
-      <author name="Andres Moreno" email="mor.qca@gmail.com" organization="cyphr" website="https://www.cyphr.ai"/>
+      <description>AI-Driven Tableau Embedded Application powered by Claire</description>
+      <author name="Andres Moreno" email="andres.moreno@confie.com" organization="claire" website="https://www.confie.ai"/>
       <min-api-version>1.0</min-api-version>
       <source-location>
-        <url>http://localhost:3000/</url>
+        <url>https://auw3d-confie-confie.snowflakecomputing.app/</url>
       </source-location>
       <icon/>
       <permissions>
@@ -16,7 +16,7 @@
     </dashboard-extension>
     <resources>
       <resource id="name">
-        <text locale="en_US">cyphr AI Extension</text>
+        <text locale="en_US">Claire AI Extension</text>
       </resource>
     </resources>
   </manifest>
