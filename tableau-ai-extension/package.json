@@ -2,6 +2,7 @@
   "name": "cyphr-tableau-extension",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://cfieandres.github.io/cyphr_tableau",
   "author": "Andres Moreno <mor.qca@gmail.com>",
   "description": "AI-Driven Tableau Embedded Application powered by cyphr",
   "dependencies": {
@@ -17,7 +18,9 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "dev": "react-scripts start"
+    "dev": "react-scripts start",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
