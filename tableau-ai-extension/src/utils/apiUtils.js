@@ -3,9 +3,9 @@
  */
 
 /**
- * Base URL for API requests, defaulting to localhost:8000 if not specified
+ * Base URL for API requests, using HTTPS for GitHub Pages compatibility
  */
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
+export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://154.53.61.191:8000'
 
 /**
  * Fetch conversation history for a specific session

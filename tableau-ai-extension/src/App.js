@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ChatDisplay from './components/ChatDisplay';
 import { getWorksheetData, getAllWorksheets } from './utils/tableauUtils';
 import { processData, checkApiHealth, getApiEndpoints } from './utils/apiUtils';
+import { API_BASE_URL } from './utils/apiUtils';
 import './styles/ChatDisplay.css';
 import './App.css';
 
@@ -222,7 +223,7 @@ function App() {
    */
   const createSession = async () => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000'}/sessions`, {
+      const response = await fetch(`${API_BASE_URL}/sessions`, {
         method: 'POST'
       });
       
@@ -247,7 +248,7 @@ function App() {
    */
   const loadSessionConversation = async (sessionId) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000'}/sessions/${sessionId}`);
+      const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}`);
       
       if (response.ok) {
         const data = await response.json();
