@@ -1,0 +1,111 @@
+# Python
+__pycache__/
+*/__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+request_logs.db
+
+# Temporary files
+.DS_Store
+Thumbs.db
+.tmp/
+.temp/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Node.js / JavaScript
+node_modules/
+jspm_packages/
+.npm
+.eslintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+
+# Tableau specific
+tableau-ai-extension/node_modules/
+tableau-ai-extension/dist/
+tableau-ai-extension/.cache/
+tableau-ai-extension/coverage/
+tableau-ai-extension/build/
+tableau-ai-extension/.env.local
+tableau-ai-extension/.env.development.local
+tableau-ai-extension/.env.test.local
+tableau-ai-extension/.env.production.local
+
+# Deployment
+.vercel
+.netlify
+.serverless/
+.fusebox/
+.dynamodb/
+
+# Test coverage
+.coverage
+htmlcov/
+.tox/
+.coverage.*
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# JWT tokens
+*.pem
