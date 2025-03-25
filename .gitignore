@@ -70,7 +70,6 @@ Thumbs.db
 *.sublime-workspace
 
 # Node.js / JavaScript
-node_modules/
 jspm_packages/
 .npm
 .eslintcache
